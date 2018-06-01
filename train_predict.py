@@ -86,22 +86,22 @@ def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, va
     return y_pred
 
 
-def lgb_cv(trainx, trainy, cv=5, random_state=2018, func=mean_squared_error):
+def lgb_cv(trainx, trainy, params,num_boost_round=500, cv=5, random_state=2018, func=mean_squared_error):
     label_size = _get_label_size(trainy)
     # cv
     final_score = []
     kf = KFold(n_splits=cv, shuffle=True, random_state=random_state)
-    for train_index, test_index in kf.split(trainx.values):
+    for train_index, test_index in kf.split(trainx):
         scores = []
         if (label_size > 1):
             for i in range(label_size):
                 pred = lgb_train(trainx[train_index], trainy[train_index][:, i],
-                                 trainx[test_index])
+                                 trainx[test_index], params, num_boost_round=num_boost_round)
                 scores.append(func(trainy[test_index][:, i], pred))
             final_score.append(np.mean(scores))
         else:
             pred = lgb_train(trainx[train_index], trainy[train_index],
-                             trainx[test_index])
+                             trainx[test_index], params, num_boost_round=num_boost_round)
             final_score.append(func(trainy[test_index], pred))
     return final_score
 
