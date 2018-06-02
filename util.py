@@ -17,8 +17,10 @@ import gc
 import pandas as pd
 from sklearn.metrics import roc_auc_score
 import functools
+from sklearn.model_selection import StratifiedKFold
 
 MAX_DIS_FUNCTION = []
+
 
 ################## 辅助函数 #####################
 def performance(f):  # 定义装饰器函数，功能是传进来的函数进行包装并返回包装后的函数
@@ -27,7 +29,7 @@ def performance(f):  # 定义装饰器函数，功能是传进来的函数进行
         t_start = time.time()  # 记录函数开始时间
         r = f(*args, **kw)  # 调用函数
         t_end = time.time()  # 记录函数结束时间
-        print ('call %s() in %fs' % (f.__name__, (t_end - t_start)))  # 打印调用函数的属性信息，并打印调用函数所用的时间
+        print('call %s() in %fs' % (f.__name__, (t_end - t_start)))  # 打印调用函数的属性信息，并打印调用函数所用的时间
         return r  # 返回包装后的函数
 
     return fn  # 调用包装后的函数
@@ -55,8 +57,9 @@ def dump_feature(f):  # 定义装饰器函数，功能是传进来的函数进�
             r.to_pickle(dump_path)
         gc.collect()
         t_end = time.time()
-        print ('call %s() in %fs' % (f.__name__, (t_end - t_start)))
+        print('call %s() in %fs' % (f.__name__, (t_end - t_start)))
         return r
+
     return fn
 
 
@@ -68,7 +71,6 @@ def exp(labels):
     return np.exp(labels) - 1
 
 
-
 def euclidean(values1, values2):
     """
     欧式距离
@@ -78,6 +80,7 @@ def euclidean(values1, values2):
     """
     return np.sqrt(np.sum((values1 - values2) ** 2, axis=1))
 
+
 def cosine(values1, values2):
     """
     欧式距离
@@ -86,6 +89,8 @@ def cosine(values1, values2):
     :return:
     """
     return np.sum((values1 * values2), axis=1) / (np.sqrt(np.sum(values1 ** 2, axis=1)) * np.sqrt(np.sum(values2 ** 2)))
+
+
 MAX_DIS_FUNCTION.append(cosine)
 
 
@@ -109,8 +114,44 @@ def filter_feature(train_df, origin_feature_names, threshold=0.95):
             stay_feature_name.append(_f)
     return remove_feature_name, stay_feature_name
 
+def detect_cate_columns(df,detect_columns):
+    """
+    检测cate列和数字列
+    :param df:
+    :param detect_columns:
+    :return:
+    """
+    part = df[detect_columns]
+    cate_columns = part.columns[part.dtypes==object]
+    num_columns = part.columns[part.dtypes!=object]
+    return cate_columns,num_columns
+
+def label_encode(df, transform_columns):
+    for _c in transform_columns:
+        uniques = df[_c].unique()
+        _d = dict(zip(uniques, range(len(uniques))))
+        df[_c] = df[_c].apply(lambda x: _d[x])
+    return df
+
+def train_test_split_stratifiedKFold(n_split, random_state, shuffle, target_df, target_column):
+    """
+    StratifiedKFold划分训练和验证
+    :param n_split:
+    :param random_state:
+    :param shuffle:
+    :param target_df:
+    :param target_column:
+    :return: [(train1_index,valid1_index),(train2_index,valid2_index),...]
+    """
+    skf = StratifiedKFold(n_splits=n_split, random_state=random_state, shuffle=shuffle)
+    g = skf.split(np.arange(target_df.shape[0]), target_df[target_column].values)
+    splits = []
+    for _x, _y in g:
+        splits.append((_x, _y))
+    return splits
+
 
 if __name__ == '__main__':
     print(cosine(np.asarray([[1, 2, 3], [2, 5, 10], [2, 4, 6]]), np.asarray([1, 2, 3])))
-    print (euclidean.__name__)
-    print (cosine in MAX_DIS_FUNCTION)
+    print(euclidean.__name__)
+    print(cosine in MAX_DIS_FUNCTION)
