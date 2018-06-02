@@ -86,7 +86,9 @@ def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, va
     return y_pred
 
 
-def lgb_cv(trainx, trainy, params,num_boost_round=500, cv=5, random_state=2018, func=mean_squared_error):
+def lgb_cv(trainx, trainy, params, num_boost_round=500,
+           use_valid=True, valid_ratio=0.2, early_stopping_rounds=5,
+           cv=5, random_state=2018, func=mean_squared_error):
     label_size = _get_label_size(trainy)
     # cv
     final_score = []
@@ -96,12 +98,14 @@ def lgb_cv(trainx, trainy, params,num_boost_round=500, cv=5, random_state=2018, 
         if (label_size > 1):
             for i in range(label_size):
                 pred = lgb_train(trainx[train_index], trainy[train_index][:, i],
-                                 trainx[test_index], params, num_boost_round=num_boost_round)
+                                 trainx[test_index], params, num_boost_round=num_boost_round,
+                                 use_valid=use_valid,valid_ratio=valid_ratio,early_stopping_rounds=early_stopping_rounds)
                 scores.append(func(trainy[test_index][:, i], pred))
             final_score.append(np.mean(scores))
         else:
             pred = lgb_train(trainx[train_index], trainy[train_index],
-                             trainx[test_index], params, num_boost_round=num_boost_round)
+                             trainx[test_index], params, num_boost_round=num_boost_round,
+                             use_valid=use_valid,valid_ratio=valid_ratio,early_stopping_rounds=early_stopping_rounds)
             final_score.append(func(trainy[test_index], pred))
     return final_score
 
@@ -113,7 +117,7 @@ def sklearn_cv(model, trainx, trainy, cv=5, random_state=2018, train_all_label=T
     kf = KFold(n_splits=cv, shuffle=True, random_state=random_state)
     for train_index, test_index in kf.split(trainx):
         scores = []
-        if(label_size > 1):
+        if (label_size > 1):
             if train_all_label:
                 pred = sklearn_train(model, trainx[train_index], trainy[train_index], trainx[test_index])
                 for i in range(label_size):
@@ -154,7 +158,7 @@ def sklearn_predict(model, trainx, trainy, testx, train_all_label=True):
     if train_all_label:
         return sklearn_train(model, trainx, trainy, testx)
     else:
-        if(label_size > 1):
+        if (label_size > 1):
             predicts = []
             for i in range(5):
                 predict = sklearn_train(model, trainx, trainy[:, i], testx)
