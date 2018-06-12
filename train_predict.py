@@ -63,27 +63,52 @@ def _get_label_size(trainy):
 def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
               validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
               predict_prob=False):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
+
+    gbm = lgb_train_model(trainx, trainy, params, use_valid, valid_ratio, validx, validy,
+                          num_boost_round, early_stopping_rounds, random_state)
+    iteration = gbm.best_iteration
+    if (iteration <= 0):
+        iteration = num_boost_round
+    return gbm.predict(testx, iteration)
+
+
+def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, validx=None,
+                    validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018):
+    """
+    lgb train 返回train的model
+    :param trainx:
+    :param trainy:
+    :param params:
+    :param use_valid:
+    :param valid_ratio:
+    :param validx:
+    :param validy:
+    :param num_boost_round:
+    :param early_stopping_rounds:
+    :param random_state:
+    :return:
+    """
     if use_valid:
         if (validx is None):
             trainx, validx, trainy, validy = train_test_split(trainx,
                                                               trainy,
                                                               test_size=valid_ratio,
                                                               random_state=random_state)
-        lgb_train = lgb.Dataset(trainx, trainy)
-        lgb_eval = lgb.Dataset(validx, validy, reference=lgb_train)
-        gbm = lgb.train(params,
-                        lgb_train,
+        lgb_train_ = lgb.Dataset(trainx, trainy)
+        lgb_eval = lgb.Dataset(validx, validy, reference=lgb_train_)
+        params_copy = params.copy()
+        gbm = lgb.train(params_copy,
+                        lgb_train_,
                         num_boost_round=num_boost_round,
                         valid_sets=[lgb_eval],
                         early_stopping_rounds=early_stopping_rounds)
-        y_pred = gbm.predict(testx, num_iteration=gbm.best_iteration)
     else:
-        lgb_train = lgb.Dataset(trainx, trainy)
-        gbm = lgb.train(params,
-                        lgb_train,
+        lgb_train_ = lgb.Dataset(trainx, trainy)
+        params_copy = params.copy()
+        gbm = lgb.train(params_copy,
+                        lgb_train_,
                         num_boost_round=num_boost_round)
-        y_pred = gbm.predict(testx)
-    return y_pred
+    return gbm
 
 
 def lgb_cv(trainx, trainy, params, num_boost_round=500,
@@ -99,13 +124,14 @@ def lgb_cv(trainx, trainy, params, num_boost_round=500,
             for i in range(label_size):
                 pred = lgb_train(trainx[train_index], trainy[train_index][:, i],
                                  trainx[test_index], params, num_boost_round=num_boost_round,
-                                 use_valid=use_valid,valid_ratio=valid_ratio,early_stopping_rounds=early_stopping_rounds)
+                                 use_valid=use_valid, valid_ratio=valid_ratio,
+                                 early_stopping_rounds=early_stopping_rounds)
                 scores.append(func(trainy[test_index][:, i], pred))
             final_score.append(np.mean(scores))
         else:
             pred = lgb_train(trainx[train_index], trainy[train_index],
                              trainx[test_index], params, num_boost_round=num_boost_round,
-                             use_valid=use_valid,valid_ratio=valid_ratio,early_stopping_rounds=early_stopping_rounds)
+                             use_valid=use_valid, valid_ratio=valid_ratio, early_stopping_rounds=early_stopping_rounds)
             final_score.append(func(trainy[test_index], pred))
     return final_score
 
@@ -135,10 +161,14 @@ def sklearn_cv(model, trainx, trainy, cv=5, random_state=2018, train_all_label=T
 
 
 def sklearn_train(model, trainx, trainy, testx):
+    model = sklearn_train_model(model, trainx, trainy)
+    predict = model._predict(testx)
+    return predict
+
+def sklearn_train_model(model, trainx, trainy):
     model = clone(model)
     model.fit(trainx, trainy)
-    predict = model.predict(testx)
-    return predict
+    return model
 
 
 def lgb_predict(trainx, trainy, testx):
