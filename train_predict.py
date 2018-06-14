@@ -14,7 +14,7 @@
 import numpy as np
 import os
 import lightgbm as lgb
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.metrics import mean_squared_error
 from sklearn.cross_validation import train_test_split
 from sklearn.base import clone
@@ -117,8 +117,8 @@ def lgb_cv(trainx, trainy, params, num_boost_round=500,
     label_size = _get_label_size(trainy)
     # cv
     final_score = []
-    kf = KFold(n_splits=cv, shuffle=True, random_state=random_state)
-    for train_index, test_index in kf.split(trainx):
+    kf = StratifiedKFold(n_splits=cv, shuffle=True, random_state=random_state)
+    for train_index, test_index in kf.split(trainx, trainy):
         scores = []
         if (label_size > 1):
             for i in range(label_size):
@@ -140,8 +140,8 @@ def sklearn_cv(model, trainx, trainy, cv=5, random_state=2018, train_all_label=T
     # cv
     label_size = _get_label_size(trainy)
     final_score = []
-    kf = KFold(n_splits=cv, shuffle=True, random_state=random_state)
-    for train_index, test_index in kf.split(trainx):
+    kf = StratifiedKFold(n_splits=cv, shuffle=True, random_state=random_state)
+    for train_index, test_index in kf.split(trainx, trainy):
         scores = []
         if (label_size > 1):
             if train_all_label:
@@ -160,10 +160,14 @@ def sklearn_cv(model, trainx, trainy, cv=5, random_state=2018, train_all_label=T
     return final_score
 
 
-def sklearn_train(model, trainx, trainy, testx):
+def sklearn_train(model, trainx, trainy, testx, preditc_proba=False):
     model = sklearn_train_model(model, trainx, trainy)
-    predict = model._predict(testx)
+    if (preditc_proba):
+        predict = model.predict_proba(testx)
+    else:
+        predict = model.predict(testx)
     return predict
+
 
 def sklearn_train_model(model, trainx, trainy):
     model = clone(model)
@@ -171,16 +175,21 @@ def sklearn_train_model(model, trainx, trainy):
     return model
 
 
-def lgb_predict(trainx, trainy, testx):
+def lgb_predict(trainx, trainy, testx,
+                params, use_valid=True, valid_ratio=0.2, validx=None,
+                validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
+                predict_prob=False):
     label_size = _get_label_size(trainy)
     if (label_size > 1):
         preds = []
         for i in range(label_size):
-            pred = lgb_train(trainx, trainy[:, i], testx)
+            pred = lgb_train(trainx, trainy[:, i], testx, params.copy(), use_valid, valid_ratio,
+                             validx, validy, num_boost_round, early_stopping_rounds, random_state, predict_prob)
             preds.append(pred)
         return np.concatenate([preds]).T
     else:
-        return lgb_train(trainx, trainy, testx)
+        return lgb_train(trainx, trainy, testx, params.copy(), use_valid, valid_ratio,
+                         validx, validy, num_boost_round, early_stopping_rounds, random_state, predict_prob)
 
 
 def sklearn_predict(model, trainx, trainy, testx, train_all_label=True):
