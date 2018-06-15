@@ -14,10 +14,11 @@
 import numpy as np
 import os
 import lightgbm as lgb
-from sklearn.model_selection import KFold
+from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.metrics import mean_squared_error
 from sklearn.cross_validation import train_test_split
 from sklearn.base import clone
+from DMF.util import detect_cates_for_narrayx, transform_float_to_int_for_narrayx
 
 # lgb params
 LGB_REGRESS_PARAMS = {
@@ -62,28 +63,67 @@ def _get_label_size(trainy):
 
 def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
               validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
-              predict_prob=False):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
+              predict_prob=True):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
+
+    gbm = lgb_train_model(trainx, trainy, params, use_valid, valid_ratio, validx, validy,
+                          num_boost_round, early_stopping_rounds, random_state)
+    return predict(gbm, "lgb", testx, predict_proba=predict_prob)
+
+
+def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, validx=None,
+                    validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018):
+    """
+    lgb train 返回train的model
+    :param trainx:
+    :param trainy:
+    :param params:
+    :param use_valid:
+    :param valid_ratio:
+    :param validx:
+    :param validy:
+    :param num_boost_round:
+    :param early_stopping_rounds:
+    :param random_state:
+    :return:
+    """
     if use_valid:
         if (validx is None):
             trainx, validx, trainy, validy = train_test_split(trainx,
                                                               trainy,
                                                               test_size=valid_ratio,
                                                               random_state=random_state)
-        lgb_train = lgb.Dataset(trainx, trainy)
-        lgb_eval = lgb.Dataset(validx, validy, reference=lgb_train)
-        gbm = lgb.train(params,
-                        lgb_train,
+        lgb_train_ = lgb.Dataset(trainx, trainy)
+        lgb_eval = lgb.Dataset(validx, validy, reference=lgb_train_)
+        params_copy = params.copy()
+        gbm = lgb.train(params_copy,
+                        lgb_train_,
                         num_boost_round=num_boost_round,
                         valid_sets=[lgb_eval],
                         early_stopping_rounds=early_stopping_rounds)
-        y_pred = gbm.predict(testx, num_iteration=gbm.best_iteration)
     else:
-        lgb_train = lgb.Dataset(trainx, trainy)
-        gbm = lgb.train(params,
-                        lgb_train,
+        lgb_train_ = lgb.Dataset(trainx, trainy)
+        params_copy = params.copy()
+        gbm = lgb.train(params_copy,
+                        lgb_train_,
                         num_boost_round=num_boost_round)
-        y_pred = gbm.predict(testx)
-    return y_pred
+    return gbm
+
+
+def lgb_predict(trainx, trainy, testx,
+                params, use_valid=True, valid_ratio=0.2, validx=None,
+                validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
+                predict_prob=False):
+    label_size = _get_label_size(trainy)
+    if (label_size > 1):
+        preds = []
+        for i in range(label_size):
+            pred = lgb_train(trainx, trainy[:, i], testx, params.copy(), use_valid, valid_ratio,
+                             validx, validy, num_boost_round, early_stopping_rounds, random_state, predict_prob)
+            preds.append(pred)
+        return np.concatenate([preds]).T
+    else:
+        return lgb_train(trainx, trainy, testx, params.copy(), use_valid, valid_ratio,
+                         validx, validy, num_boost_round, early_stopping_rounds, random_state, predict_prob)
 
 
 def lgb_cv(trainx, trainy, params, num_boost_round=500,
@@ -92,20 +132,21 @@ def lgb_cv(trainx, trainy, params, num_boost_round=500,
     label_size = _get_label_size(trainy)
     # cv
     final_score = []
-    kf = KFold(n_splits=cv, shuffle=True, random_state=random_state)
-    for train_index, test_index in kf.split(trainx):
+    kf = StratifiedKFold(n_splits=cv, shuffle=True, random_state=random_state)
+    for train_index, test_index in kf.split(trainx, trainy):
         scores = []
         if (label_size > 1):
             for i in range(label_size):
                 pred = lgb_train(trainx[train_index], trainy[train_index][:, i],
                                  trainx[test_index], params, num_boost_round=num_boost_round,
-                                 use_valid=use_valid,valid_ratio=valid_ratio,early_stopping_rounds=early_stopping_rounds)
+                                 use_valid=use_valid, valid_ratio=valid_ratio,
+                                 early_stopping_rounds=early_stopping_rounds)
                 scores.append(func(trainy[test_index][:, i], pred))
             final_score.append(np.mean(scores))
         else:
             pred = lgb_train(trainx[train_index], trainy[train_index],
                              trainx[test_index], params, num_boost_round=num_boost_round,
-                             use_valid=use_valid,valid_ratio=valid_ratio,early_stopping_rounds=early_stopping_rounds)
+                             use_valid=use_valid, valid_ratio=valid_ratio, early_stopping_rounds=early_stopping_rounds)
             final_score.append(func(trainy[test_index], pred))
     return final_score
 
@@ -114,8 +155,8 @@ def sklearn_cv(model, trainx, trainy, cv=5, random_state=2018, train_all_label=T
     # cv
     label_size = _get_label_size(trainy)
     final_score = []
-    kf = KFold(n_splits=cv, shuffle=True, random_state=random_state)
-    for train_index, test_index in kf.split(trainx):
+    kf = StratifiedKFold(n_splits=cv, shuffle=True, random_state=random_state)
+    for train_index, test_index in kf.split(trainx, trainy):
         scores = []
         if (label_size > 1):
             if train_all_label:
@@ -134,25 +175,6 @@ def sklearn_cv(model, trainx, trainy, cv=5, random_state=2018, train_all_label=T
     return final_score
 
 
-def sklearn_train(model, trainx, trainy, testx):
-    model = clone(model)
-    model.fit(trainx, trainy)
-    predict = model.predict(testx)
-    return predict
-
-
-def lgb_predict(trainx, trainy, testx):
-    label_size = _get_label_size(trainy)
-    if (label_size > 1):
-        preds = []
-        for i in range(label_size):
-            pred = lgb_train(trainx, trainy[:, i], testx)
-            preds.append(pred)
-        return np.concatenate([preds]).T
-    else:
-        return lgb_train(trainx, trainy, testx)
-
-
 def sklearn_predict(model, trainx, trainy, testx, train_all_label=True):
     label_size = _get_label_size(trainy)
     if train_all_label:
@@ -166,3 +188,49 @@ def sklearn_predict(model, trainx, trainy, testx, train_all_label=True):
             return np.concatenate([predicts]).T
         else:
             return sklearn_train(model, trainx, trainy, testx)
+
+
+def sklearn_train(model, trainx, trainy, testx, preditc_proba=False):
+    model = sklearn_train_model(model, trainx, trainy)
+    return predict(model, model.__class__.__name__, testx, preditc_proba)
+
+
+def sklearn_train_model(model, trainx, trainy):
+    model = clone(model)
+    model.fit(trainx, trainy)
+    return model
+
+
+def catboost_train_model(model, trainx, trainy, cate_threshold=10):
+    model = clone(model)
+    cates = detect_cates_for_narrayx(trainx, cate_threshold)
+    trainx = transform_float_to_int_for_narrayx(trainx, cates)
+    model.fit(trainx, trainy, cates)
+    model.cates = cates
+    return model
+
+
+def catboost_train(model, trainx, trainy, testx, cate_threshold=10, predict_proba=True):
+    model = catboost_train_model(model, trainx, trainy, cate_threshold)
+    testx = transform_float_to_int_for_narrayx(testx, model.cates)
+    return predict(model, "catboost", testx, predict_proba)
+
+
+def predict(trained_model, model_name, testx, predict_proba=True):
+    if (model_name == "lgb"):
+        iteration = trained_model.best_iteration
+        if (iteration <= 0):
+            iteration = trained_model.current_iteration()
+        if (iteration < 0):
+            print("please set iteration, now it is {}".format(iteration))
+            exit(1)
+        if (predict_proba):
+            return trained_model.predict(testx, iteration)
+    else:
+        if(model_name == "catboost"):
+            testx = transform_float_to_int_for_narrayx(testx, trained_model.cates)
+
+        if (predict_proba):
+            return trained_model.predict_proba(testx)
+        else:
+            return trained_model.predict(testx)
