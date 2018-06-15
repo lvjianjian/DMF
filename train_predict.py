@@ -18,6 +18,7 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.metrics import mean_squared_error
 from sklearn.cross_validation import train_test_split
 from sklearn.base import clone
+from DMF.util import detect_cates_for_narrayx, transform_float_to_int_for_narrayx
 
 # lgb params
 LGB_REGRESS_PARAMS = {
@@ -62,14 +63,11 @@ def _get_label_size(trainy):
 
 def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
               validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
-              predict_prob=False):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
+              predict_prob=True):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
 
     gbm = lgb_train_model(trainx, trainy, params, use_valid, valid_ratio, validx, validy,
                           num_boost_round, early_stopping_rounds, random_state)
-    iteration = gbm.best_iteration
-    if (iteration <= 0):
-        iteration = num_boost_round
-    return gbm.predict(testx, iteration)
+    return predict(gbm, "lgb", testx, predict_proba=predict_prob)
 
 
 def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, validx=None,
@@ -109,6 +107,23 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
                         lgb_train_,
                         num_boost_round=num_boost_round)
     return gbm
+
+
+def lgb_predict(trainx, trainy, testx,
+                params, use_valid=True, valid_ratio=0.2, validx=None,
+                validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
+                predict_prob=False):
+    label_size = _get_label_size(trainy)
+    if (label_size > 1):
+        preds = []
+        for i in range(label_size):
+            pred = lgb_train(trainx, trainy[:, i], testx, params.copy(), use_valid, valid_ratio,
+                             validx, validy, num_boost_round, early_stopping_rounds, random_state, predict_prob)
+            preds.append(pred)
+        return np.concatenate([preds]).T
+    else:
+        return lgb_train(trainx, trainy, testx, params.copy(), use_valid, valid_ratio,
+                         validx, validy, num_boost_round, early_stopping_rounds, random_state, predict_prob)
 
 
 def lgb_cv(trainx, trainy, params, num_boost_round=500,
@@ -160,38 +175,6 @@ def sklearn_cv(model, trainx, trainy, cv=5, random_state=2018, train_all_label=T
     return final_score
 
 
-def sklearn_train(model, trainx, trainy, testx, preditc_proba=False):
-    model = sklearn_train_model(model, trainx, trainy)
-    if (preditc_proba):
-        predict = model.predict_proba(testx)
-    else:
-        predict = model.predict(testx)
-    return predict
-
-
-def sklearn_train_model(model, trainx, trainy):
-    model = clone(model)
-    model.fit(trainx, trainy)
-    return model
-
-
-def lgb_predict(trainx, trainy, testx,
-                params, use_valid=True, valid_ratio=0.2, validx=None,
-                validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
-                predict_prob=False):
-    label_size = _get_label_size(trainy)
-    if (label_size > 1):
-        preds = []
-        for i in range(label_size):
-            pred = lgb_train(trainx, trainy[:, i], testx, params.copy(), use_valid, valid_ratio,
-                             validx, validy, num_boost_round, early_stopping_rounds, random_state, predict_prob)
-            preds.append(pred)
-        return np.concatenate([preds]).T
-    else:
-        return lgb_train(trainx, trainy, testx, params.copy(), use_valid, valid_ratio,
-                         validx, validy, num_boost_round, early_stopping_rounds, random_state, predict_prob)
-
-
 def sklearn_predict(model, trainx, trainy, testx, train_all_label=True):
     label_size = _get_label_size(trainy)
     if train_all_label:
@@ -205,3 +188,49 @@ def sklearn_predict(model, trainx, trainy, testx, train_all_label=True):
             return np.concatenate([predicts]).T
         else:
             return sklearn_train(model, trainx, trainy, testx)
+
+
+def sklearn_train(model, trainx, trainy, testx, preditc_proba=False):
+    model = sklearn_train_model(model, trainx, trainy)
+    return predict(model, model.__class__.__name__, testx, preditc_proba)
+
+
+def sklearn_train_model(model, trainx, trainy):
+    model = clone(model)
+    model.fit(trainx, trainy)
+    return model
+
+
+def catboost_train_model(model, trainx, trainy, cate_threshold=10):
+    model = clone(model)
+    cates = detect_cates_for_narrayx(trainx, cate_threshold)
+    trainx = transform_float_to_int_for_narrayx(trainx, cates)
+    model.fit(trainx, trainy, cates)
+    model.cates = cates
+    return model
+
+
+def catboost_train(model, trainx, trainy, testx, cate_threshold=10, predict_proba=True):
+    model = catboost_train_model(model, trainx, trainy, cate_threshold)
+    testx = transform_float_to_int_for_narrayx(testx, model.cates)
+    return predict(model, "catboost", testx, predict_proba)
+
+
+def predict(trained_model, model_name, testx, predict_proba=True):
+    if (model_name == "lgb"):
+        iteration = trained_model.best_iteration
+        if (iteration <= 0):
+            iteration = trained_model.current_iteration()
+        if (iteration < 0):
+            print("please set iteration, now it is {}".format(iteration))
+            exit(1)
+        if (predict_proba):
+            return trained_model.predict(testx, iteration)
+    else:
+        if(model_name == "catboost"):
+            testx = transform_float_to_int_for_narrayx(testx, trained_model.cates)
+
+        if (predict_proba):
+            return trained_model.predict_proba(testx)
+        else:
+            return trained_model.predict(testx)

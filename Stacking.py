@@ -24,7 +24,8 @@ class StackingBaseModel(BaseEstimator):
 
     def __init__(self, base_model, base_model_name, other_params, cv,
                  use_valid=True, valid_ratio=0.2,
-                 shuffle=True, random_state=None, top_k_origin_feature=10):
+                 shuffle=True, random_state=None, top_k_origin_feature=10,
+                 predict_proba=True,cat_boost_threshold=10):
         self.top_k_origin_feature = top_k_origin_feature
         self.base_model = base_model
         self.base_model_name = base_model_name
@@ -37,6 +38,8 @@ class StackingBaseModel(BaseEstimator):
         if (self.valid_ratio <= 0):
             self.use_valid = False
         self.split = StratifiedKFold(n_splits=self.cv, shuffle=self.shuffle, random_state=self.random_state)
+        self.set_predict_proba(predict_proba)
+        self.cat_boost_threshold = cat_boost_threshold
 
     def _init(self):
         self.newx = None
@@ -74,7 +77,9 @@ class StackingBaseModel(BaseEstimator):
                                                         valid_ratio=self.valid_ratio))
                 _newx = self._predict(self.base_models[_i], self.base_model_name, _testx)
 
-
+            elif (self.base_model_name == "catboost"):
+                self.base_models.append(catboost_train_model(self.base_model, _trainx, _trainy,self.cat_boost_threshold))
+                _newx = self._predict(self.base_models[_i], self.base_model_name, _testx)
             else:
                 self.base_models.append(sklearn_train_model(self.base_model, _trainx, _trainy))
                 _newx = self._predict(self.base_models[_i], self.base_model_name, _testx)
@@ -103,9 +108,14 @@ class StackingBaseModel(BaseEstimator):
         return self
 
     def _predict(self, model, model_name, x):
-        return model.predict(x)
+        return predict(model, model_name, x, self.predict_proba)
+
+    def set_predict_proba(self, predict_proba):
+        self.predict_proba = predict_proba
 
     def _feature_importance(self, top_k_origin_feature):
+        if (top_k_origin_feature == 0):
+            return []
         f = None
         nf = None
         for _model in self.base_models:

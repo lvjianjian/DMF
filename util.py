@@ -243,6 +243,33 @@ def train_test_split_stratifiedKFold(n_split, random_state, shuffle, target_df, 
         splits.append((_x, _y))
     return splits
 
+def detect_cates_for_narrayx(x, threshold=10):
+    """
+    将数量小于等于threshold的认为 是cate列
+    :param x: np_array
+    :param threshold:
+    :return:
+    """
+    cates = []
+    for _i in range(x.shape[1]):
+        if(len(np.unique(x[:, _i])) <= threshold):
+            if(np.isnan(x[:, _i]).sum()==0):
+                x[:, _i] = x[:, _i].astype(int)
+                cates.append(_i)
+    return cates
+
+def transform_float_to_int_for_narrayx(x, cates):
+    """
+    将x中cates的列的全部转换为int
+    :param x: np_array
+    :param cates:
+    :return:
+    """
+    x = x.copy()
+    for _i in cates:
+        x[:, _i] = x[:, _i].astype(int)
+    return x
+
 
 if __name__ == '__main__':
     print(cosine(np.asarray([[1, 2, 3], [2, 5, 10], [2, 4, 6]]), np.asarray([1, 2, 3])))
