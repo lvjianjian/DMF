@@ -34,6 +34,15 @@ def performance(f):  # 定义装饰器函数，功能是传进来的函数进行
 
     return fn  # 调用包装后的函数
 
+def checkpath(f):
+    # 检查一下用来存放checkpoint的path是否存在了
+    @functools.wraps(f)
+    def fn(*args, **kw):
+        if 'checkpath' in args[0].keys():
+            if os.path.exists(args[0]['checkpath'])==False:
+                os.makedirs(args[0]['checkpath'])
+        f(*args, **kw)
+    return fn
 
 def dump_feature(f):  # 定义装饰器函数，功能是传进来的函数进行包装并返回包装后的函数
     @functools.wraps(f)
@@ -62,14 +71,16 @@ def dump_feature(f):  # 定义装饰器函数，功能是传进来的函数进�
 
     return fn
 
+# def check_labeled_existing(f):
+#     @functools.wraps(f)
+#     def fn(*args, **kw):
+#         if 
 
 def log(labels):
     return np.log(labels + 1)
 
-
 def exp(labels):
     return np.exp(labels) - 1
-
 
 def euclidean(values1, values2):
     """
@@ -83,7 +94,7 @@ def euclidean(values1, values2):
 
 def cosine(values1, values2):
     """
-    欧式距离
+    余弦距离
     :param values1: n_sample * f_leangth
     :param values2: n_sample * f_leangth 或者 f_leangth
     :return:
