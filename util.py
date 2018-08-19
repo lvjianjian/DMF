@@ -20,9 +20,12 @@ import functools
 from sklearn.model_selection import StratifiedKFold
 from scipy.stats import spearmanr
 from sklearn.preprocessing import LabelEncoder
-
-
-
+from joblib import dump, load, Parallel, delayed
+# from smooth import HyperParam
+import contextlib
+from contextlib import contextmanager
+from itertools import product
+from DMF.smooth import HyperParam
 MAX_DIS_FUNCTION = []
 
 
@@ -59,21 +62,75 @@ def dump_feature(f):  # 定义装饰器函数，功能是传进来的函数进�
             fname = f.__name__
             for _n in args[:-1]:
                 fname += "_{}".format(_n)
-            fname += ".pickle"
+            fname += ".feather"
             dump_path = os.path.join(path, fname)
         else:
-            dump_path = os.path.join(path, f.__name__ + '.pickle')
+            dump_path = os.path.join(path, f.__name__ + '.feather')
         if os.path.exists(dump_path):
-            r = pd.read_pickle(dump_path)
+            r = pd.read_feather(dump_path, nthreads=4)
         else:
             r = f(*args, **kw)
-            r.to_pickle(dump_path)
+            downcast(r)
+            r.reset_index(drop=True, inplace=True)
+            for c in r.columns:
+                if r[c].dtype == 'float64':
+                    r[c] = r[c].astype('float32')
+            r.to_feather(dump_path)
         gc.collect()
         t_end = time.time()
         print('call %s() in %fs' % (f.__name__, (t_end - t_start)))
         return r
-
     return fn
+
+
+MAIN_ID = ["uid", "pid"]
+def dump_feature_remove_main_id(f):  # 定义装饰器函数，功能是传进来的函数进行包装并返回包装后的函数
+    @functools.wraps(f)
+    def fn(*args, **kw):  # 对传进来的函数进行包装的函数
+        path = os.path.join(args[-1], "features_remove_main_id")
+        if (not os.path.exists(path)):
+            os.mkdir(path)
+        t_start = time.time()
+        if (len(args) > 1):
+            fname = f.__name__
+            for _n in args[:-1]:
+                fname += "_{}".format(_n)
+            fname += ".feather"
+            dump_path = os.path.join(path, fname)
+        else:
+            dump_path = os.path.join(path, f.__name__ + '.feather')
+        if os.path.exists(dump_path):
+            r = pd.read_feather(dump_path, nthreads=4)
+            downcast(r)
+        else:
+            r = f(*args, **kw)
+            r.sort_values(by=MAIN_ID, inplace=True)
+            # remove main id
+            if(f.__name__ != 'click_label'):
+                for _c in MAIN_ID:
+                    del r[_c]
+            # down bit
+            for c in r.columns:
+                if r[c].dtype == 'float64':
+                    r[c] = r[c].astype('float32')
+            r.reset_index(drop=True, inplace=True)
+            r.to_feather(dump_path)
+        gc.collect()
+        t_end = time.time()
+        print('call %s() in %fs' % (f.__name__, (t_end - t_start)))
+        return r
+    return fn
+
+# 合并节约内存
+@performance
+def concat(L):
+    result = None
+    for l in L:
+        if result is None:
+            result = l
+        else:
+            result[l.columns.tolist()] = l
+    return result
 
 # def check_labeled_existing(f):
 #     @functools.wraps(f)
@@ -107,6 +164,15 @@ def cosine(values1, values2):
 MAX_DIS_FUNCTION.append(cosine)
 
 
+
+def optm_cosine(v1, v2):
+    """
+    优化一波余弦距离
+    """
+    n_samples, f_features = v1.shape
+    n_centers, f_features = v2.shape
+    return np.dot(v1, v2.T) / np.dot(np.linalg.norm(v1, axis=1).reshape(n_samples, -1), np.linalg.norm(v2, axis=1).reshape(-1, n_centers))
+MAX_DIS_FUNCTION.append(optm_cosine)
 # 过滤缺失值过多的特征
 def filter_feature_by_missing(df, origin_feature_names, threshold=0.95):
     """
@@ -281,6 +347,75 @@ def transform_float_to_int_for_narrayx(x, cates):
         x[:, _i] = x[:, _i].astype(int)
     return x
 
+def downcast(df):
+    """
+    降位
+    :param df:
+    :return:
+    """
+    print (df.info(memory_usage='deep'))
+    df_int = df.select_dtypes(include=['int64', 'int32']).apply(pd.to_numeric, downcast='integer')
+    df[df_int.columns] = df_int
+    del df_int; gc.collect()
+    print (df.info(memory_usage='deep'))
+    df_float64 = df.select_dtypes(include=['float64']).apply(pd.to_numeric, downcast='float')
+    df[df_float64.columns] = df_float64
+    del df_float64; gc.collect()
+    print (df.info(memory_usage='deep'))
+
+
+def lgb_stacking_feature(params,trainx,trainy,testx,probe_name,topk=0,feature_names=None,cv=3,rounds=3):
+    from DMF.Stacking import StackingBaseModel
+    newtrain = np.zeros(shape=(trainx.shape[0],))
+    newtest = np.zeros(shape=(testx.shape[0],))
+
+    for _i in range(rounds):
+        stack = StackingBaseModel(None, "lgb", params, cv, use_valid=False, random_state=2018 * _i,
+                                  top_k_origin_feature=topk)
+        stack.set_feature_names(feature_names)
+        _ntest = stack.fit_transfrom(trainx, trainy, testx)
+        _ntrain = stack.trainx_
+        newtrain += _ntrain[:, 0]
+        newtest += _ntest[:, 0]
+    newtrain /= rounds
+    newtest /= rounds
+    topkfname = stack.topk_feature_name
+    dftrain = pd.DataFrame(newtrain)
+    dftest = pd.DataFrame(newtest)
+    dftrain.columns = [probe_name+"_probe"]
+    dftest.columns = [probe_name+"_probe"]
+    df1 = pd.concat([dftrain, dftest], axis=0).reset_index(drop=True)
+    if(topkfname is not None):
+        newtrain2 = _ntrain[:, 1:]
+        newtest2 = _ntest[:, 1:]
+        dftrain2 = pd.DataFrame(newtrain2)
+        dftest2 = pd.DataFrame(newtest2)
+        dftrain2.columns = topkfname
+        dftest2.columns = topkfname
+        df2 = pd.concat([dftrain2, dftest2], axis=0).reset_index(drop=True)
+        df1 = concat([df1, df2])
+    return df1
+
+
+def encode_vt(train_df, test_df, variable, target):
+    col_name = "_".join([variable, target])
+    if target != 'playing_time':
+        grouped = train_df.groupby(variable, as_index=False)[target].agg({"C": "size", "V": "sum"})
+        print ('start smooth')
+        hyper = HyperParam(1, 1)
+        C = grouped['C']
+        V = grouped['V']
+        hyper.update_from_data_by_moment(C, V)
+        print ('end smooth')
+        grouped[col_name] = (hyper.alpha + V) / (hyper.alpha + hyper.beta + C)
+        grouped[col_name] = grouped[col_name].astype('float32')
+        df = test_df[[variable]].merge(grouped, 'left', variable)[col_name]
+        df = np.asarray(df, dtype=np.float32)
+    else:
+        grouped = train_df.groupby(variable, as_index=False)[target].agg({col_name: "mean"})
+        df = test_df[[variable]].merge(grouped, 'left', variable)[col_name]
+        df = np.asarray(df, dtype=np.float32)        
+    return df
 
 if __name__ == '__main__':
     print(cosine(np.asarray([[1, 2, 3], [2, 5, 10], [2, 4, 6]]), np.asarray([1, 2, 3])))

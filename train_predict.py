@@ -12,6 +12,7 @@
 """
 
 import numpy as np
+import pandas as pd
 import os
 import lightgbm as lgb
 from sklearn.model_selection import KFold, StratifiedKFold
@@ -19,6 +20,7 @@ from sklearn.metrics import mean_squared_error
 from sklearn.cross_validation import train_test_split
 from sklearn.base import clone
 from DMF.util import detect_cates_for_narrayx, transform_float_to_int_for_narrayx
+import gc
 
 # lgb params
 LGB_REGRESS_PARAMS = {
@@ -60,18 +62,24 @@ def _get_label_size(trainy):
         label_size = 1
     return label_size
 
-
 def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
               validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
-              predict_prob=True):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
-
+              predict_prob=True, feature_importances=None, group=None,model_save_file=None,
+              feature_names="auto", isFromFile=False):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
     gbm = lgb_train_model(trainx, trainy, params, use_valid, valid_ratio, validx, validy,
-                          num_boost_round, early_stopping_rounds, random_state)
+                          num_boost_round, early_stopping_rounds, random_state, feature_names, group,isFromFile=isFromFile)
+    if(model_save_file is not None):
+        gbm.save_model(model_save_file, num_iteration=gbm.best_iteration)
+    if(type(feature_importances) == list):
+        names, importances = zip(*(sorted(zip( gbm.feature_name(), gbm.feature_importance()), key=lambda x: -x[1])))
+        feature_importances += list((zip(names,importances)))
     return predict(gbm, "lgb", testx, predict_proba=predict_prob)
 
 
 def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, validx=None,
-                    validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018):
+                    validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
+
+                    feature_names=None,group=None,isFromFile=False):
     """
     lgb train 返回train的model
     :param trainx:
@@ -86,22 +94,63 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
     :param random_state:
     :return:
     """
+
+
+    if(feature_names is None):
+        feature_names = "auto"
+    if(isFromFile):
+        print("do not support isFromFile Now")
+        exit(1)
+        if(type(trainx) is pd.DataFrame):
+            feature_names = list(trainx.columns)
+        if(type(feature_names) is not list and type(feature_names) is not pd.Index and feature_names == "auto"):
+            print("please set feature names when isFromFile == True")
+            exit(1)
+        train_np = trainx.values.reshape(-1).astype(np.float32)
+        num_sample, num_feature = trainx.shape
+        del trainx # cannot del global
+        train_np.tofile('./X_train_cache.bin')
+        del train_np
+
     if use_valid:
         if (validx is None):
             trainx, validx, trainy, validy = train_test_split(trainx,
                                                               trainy,
                                                               test_size=valid_ratio,
                                                               random_state=random_state)
-        lgb_train_ = lgb.Dataset(trainx, trainy)
+        if(isFromFile):
+            lgb_train_ = lgb.Dataset('./X_train_cache.bin',
+                                    label=trainy,
+                                    feature_name = feature_names,
+                                    isFromFile = True,
+                                    shape = (num_sample, num_feature))
+        else:
+            lgb_train_ = lgb.Dataset(trainx, trainy, feature_name=feature_names)
+        del trainx
+        del trainy
+        gc.collect()
         lgb_eval = lgb.Dataset(validx, validy, reference=lgb_train_)
+        del validx
+        del validy
+        gc.collect()
         params_copy = params.copy()
         gbm = lgb.train(params_copy,
                         lgb_train_,
                         num_boost_round=num_boost_round,
-                        valid_sets=[lgb_eval],
+                        valid_sets=lgb_eval,
                         early_stopping_rounds=early_stopping_rounds)
     else:
-        lgb_train_ = lgb.Dataset(trainx, trainy)
+        if(isFromFile):
+            lgb_train_ = lgb.Dataset('./X_train_cache.bin',
+                                     label=trainy,
+                                     feature_name = feature_names,
+                                     isFromFile = True,
+                                     shape = (num_sample, num_feature))
+        else:
+            lgb_train_ = lgb.Dataset(trainx, trainy,feature_name=feature_names,group=group)
+        del trainx
+        del trainy
+        gc.collect()
         params_copy = params.copy()
         gbm = lgb.train(params_copy,
                         lgb_train_,
@@ -234,3 +283,26 @@ def predict(trained_model, model_name, testx, predict_proba=True):
             return trained_model.predict_proba(testx)
         else:
             return trained_model.predict(testx)
+
+
+def lgb_self_train(params, trainx, trainy, testx,
+                   use_valid=True, valid_ratio=0.2, validx=None,
+                   validy=None, num_boost_round=500, early_stopping_rounds=5,
+                   min_prob = 0.95, max_iteration=3):
+    """
+    自训练，将test中认为可靠的加入训练集再训练并预测，暂时只针对2分类
+    :param params:
+    :param trainx:
+    :param trainy:
+    :param testx:
+    :param use_valid:
+    :param valid_ratio:
+    :param validx:
+    :param validy:
+    :param num_boost_round:
+    :param early_stopping_rounds:
+    :param min_prob:
+    :param max_iteration:
+    :return:
+    """
+    pass
