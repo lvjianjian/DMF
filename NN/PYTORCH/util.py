@@ -26,7 +26,7 @@ def train(train_loader, model, criterion, optimizer, epoch, use_cuda):
     data_time = AverageMeter()
     losses = AverageMeter()
     top1 = AverageMeter()
-    top5 = AverageMeter()
+    top3 = AverageMeter()
     end = time.time()
 
     bar = Bar('Processing', max=len(train_loader))
@@ -43,10 +43,10 @@ def train(train_loader, model, criterion, optimizer, epoch, use_cuda):
         loss = criterion(outputs, targets)
 
         # measure accuracy and record loss
-        prec1, prec5 = accuracy(outputs.data, targets.data, topk=(1, 5))
+        prec1, prec3 = accuracy(outputs.data, targets.data, topk=(1, 3))
         losses.update(loss.data[0], inputs.size(0))
         top1.update(prec1[0], inputs.size(0))
-        top5.update(prec5[0], inputs.size(0))
+        top3.update(prec3[0], inputs.size(0))
 
         # compute gradient and do SGD step
         optimizer.zero_grad()
@@ -58,7 +58,7 @@ def train(train_loader, model, criterion, optimizer, epoch, use_cuda):
         end = time.time()
 
         # plot progress
-        bar.suffix  = '({batch}/{size}) Data: {data:.3f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | top1: {top1: .4f} | top5: {top5: .4f}'.format(
+        bar.suffix  = '({batch}/{size}) Data: {data:.3f}s | Batch: {bt:.3f}s | Total: {total:} | ETA: {eta:} | Loss: {loss:.4f} | top1: {top1: .4f} | top3: {top5: .4f}'.format(
                 batch=batch_idx + 1,
                 size=len(train_loader),
                 data=data_time.val,
@@ -67,7 +67,7 @@ def train(train_loader, model, criterion, optimizer, epoch, use_cuda):
                 eta=bar.eta_td,
                 loss=losses.avg,
                 top1=top1.avg,
-                top5=top5.avg,
+                top5=top3.avg,
         )
         bar.next()
     bar.finish()

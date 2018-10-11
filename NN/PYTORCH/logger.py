@@ -76,7 +76,7 @@ class Logger(object):
         for _, name in enumerate(names):
             x = np.arange(len(numbers[name]))
             plt.plot(x, np.asarray(numbers[name]))
-        plt.legend([self.title + '(' + name + ')' for name in names])
+        plt.legend([self.title + '(' + name + ')' for name in names], loc='best')
         plt.grid(True)
 
     def close(self):
