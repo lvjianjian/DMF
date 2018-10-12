@@ -15,9 +15,8 @@ import numpy as np
 import pandas as pd
 import os
 import lightgbm as lgb
-from sklearn.model_selection import KFold, StratifiedKFold
+from sklearn.model_selection import KFold, StratifiedKFold,train_test_split
 from sklearn.metrics import mean_squared_error
-from sklearn.cross_validation import train_test_split
 from sklearn.base import clone
 from DMF.util import detect_cates_for_narrayx, transform_float_to_int_for_narrayx
 import gc
