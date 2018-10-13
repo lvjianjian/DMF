@@ -146,7 +146,6 @@ def concat(L):
 def log(labels):
     return np.log(labels + 1)
 
-
 def exp(labels):
     return np.exp(labels) - 1
 
