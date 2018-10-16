@@ -22,6 +22,17 @@ class StackingBaseModel(BaseEstimator):
     训练stacking base model
     """
 
+    def _init(self):
+        self.newx = None
+        self.paramss = []
+        self.base_models = []
+        if (self.base_model_name in ['xgb', 'lgb']):
+            for _i in range(self.cv):
+                self.paramss.append(self.other_params.copy())
+        self.use_origin_all = False
+        if (self.top_k_origin_feature < 0):
+            self.use_origin_all = True
+
     def __init__(self, base_model, base_model_name, other_params, cv,
                  use_valid=True, valid_ratio=0.2,
                  shuffle=True, random_state=None, top_k_origin_feature=10,
@@ -42,17 +53,6 @@ class StackingBaseModel(BaseEstimator):
         self.cat_boost_threshold = cat_boost_threshold
         self.feature_name = None
         self.topk_feature_name = None
-
-    def _init(self):
-        self.newx = None
-        self.paramss = []
-        self.base_models = []
-        if (self.base_model_name == "lgb"):
-            for _i in range(self.cv):
-                self.paramss.append(self.other_params.copy())
-        self.use_origin_all = False
-        if (self.top_k_origin_feature < 0):
-            self.use_origin_all = True
 
     def _reshape(self, nindex, newx):
         _d = list(zip(nindex, np.arange(nindex.shape[0])))
@@ -86,7 +86,12 @@ class StackingBaseModel(BaseEstimator):
                                                         valid_ratio=self.valid_ratio,
                                                         feature_names=self.feature_name))
                 _newx = self._predict(self.base_models[_i], self.base_model_name, _testx)
-
+            elif (self.base_model_name == "xgb"):
+                self.base_models.append(xgb_train_model(_trainx, _trainy,self.paramss[_i],
+                                                        use_valid=self.use_valid,
+                                                        valid_ratio=self.valid_ratio,
+                                                        feature_names=self.feature_name))
+                _newx = self._predict(self.base_models[_i], self.base_model_name, _testx)
             elif (self.base_model_name == "catboost"):
                 self.base_models.append(
                     catboost_train_model(self.base_model, _trainx, _trainy, self.cat_boost_threshold))
@@ -105,7 +110,7 @@ class StackingBaseModel(BaseEstimator):
         if(type(trainx) != np.ndarray):
             self.trainx_ = trainx.values
         else:
-            self.trainx_ = trainx.values
+            self.trainx_ = trainx
 
         if (len(self.newx_.shape) > 1):
             nc = self.newx_.shape[1]
@@ -149,7 +154,7 @@ class StackingBaseModel(BaseEstimator):
         if(type(testx) != np.ndarray):
             testx = testx.values
         else:
-            testx = testx.values
+            testx = testx
         if (self.newx_ is None):
             print("please fit first")
             exit(1)
@@ -163,8 +168,13 @@ class StackingBaseModel(BaseEstimator):
             self.topk_feature_name = self.base_models[0].feature_name()
         else:
             testx = np.concatenate([_testx, testx[:, self._origin_index]], axis=1)
-            fn = self.base_models[0].feature_name()
-            self.topk_feature_name = [fn[_i] for _i in self._origin_index]
+            if(self.base_model_name != 'sklearn'):
+                if(self.base_model_name == 'lgb'):
+                    fn = self.base_models[0].feature_name()
+                    self.topk_feature_name = [fn[_i] for _i in self._origin_index]
+                elif(self.base_model_name == 'xgb'):
+                    fn = self.base_models[0].feature_names
+                    self.topk_feature_name = [fn[_i] for _i in self._origin_index]
         return testx
 
     def fit_transfrom(self, trainx, trainy, testx):

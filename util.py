@@ -84,11 +84,13 @@ def dump_feature(f):  # 定义装饰器函数，功能是传进来的函数进�
         t_end = time.time()
         print('call %s() in %fs' % (f.__name__, (t_end - t_start)))
         return r
+
     return fn
 
 
 MAIN_ID = ["query", "title", "tag"]
 SORT_ID = ['_index']
+
 
 def dump_feature_remove_main_id(f):  # 定义装饰器函数，功能是传进来的函数进行包装并返回包装后的函数
     @functools.wraps(f)
@@ -114,9 +116,11 @@ def dump_feature_remove_main_id(f):  # 定义装饰器函数，功能是传进�
             # remove main id
             if (f.__name__ != 'click_label'):
                 for _c in MAIN_ID:
-                    del r[_c]
+                    if (_c in r.columns):
+                        del r[_c]
                 for _c in SORT_ID:
-                    del r[_c]
+                    if (_c in r.columns):
+                        del r[_c]
             # down bit
             for c in r.columns:
                 if r[c].dtype == 'float64':
@@ -145,6 +149,7 @@ def concat(L):
 
 def log(labels):
     return np.log(labels + 1)
+
 
 def exp(labels):
     return np.exp(labels) - 1
@@ -416,6 +421,103 @@ def lgb_stacking_feature(params, trainx, trainy, testx, probe_name, topk=0, feat
         df1 = concat([df1, df2])
     return df1
 
+def xgb_stacking_feature(params, trainx, trainy, testx, probe_name, topk=0, feature_names=None, cv=3, rounds=3):
+    from DMF.Stacking import StackingBaseModel
+    newtrain = np.zeros(shape=(trainx.shape[0],))
+    newtest = np.zeros(shape=(testx.shape[0],))
+
+    for _i in range(rounds):
+        stack = StackingBaseModel(None, "xgb", params, cv, use_valid=False, random_state=2018 * _i,
+                                  top_k_origin_feature=topk)
+        stack.set_feature_names(feature_names)
+        _ntest = stack.fit_transfrom(trainx, trainy, testx)
+        _ntrain = stack.trainx_
+        newtrain += _ntrain[:, 0]
+        newtest += _ntest[:, 0]
+    newtrain /= rounds
+    newtest /= rounds
+    topkfname = stack.topk_feature_name
+    dftrain = pd.DataFrame(newtrain)
+    dftest = pd.DataFrame(newtest)
+    dftrain.columns = [probe_name + "_probe"]
+    dftest.columns = [probe_name + "_probe"]
+    df1 = pd.concat([dftrain, dftest], axis=0).reset_index(drop=True)
+    if (topkfname is not None):
+        newtrain2 = _ntrain[:, 1:]
+        newtest2 = _ntest[:, 1:]
+        dftrain2 = pd.DataFrame(newtrain2)
+        dftest2 = pd.DataFrame(newtest2)
+        dftrain2.columns = topkfname
+        dftest2.columns = topkfname
+        df2 = pd.concat([dftrain2, dftest2], axis=0).reset_index(drop=True)
+        df1 = concat([df1, df2])
+    return df1
+
+
+def catboost_stacking_feature(model, trainx, trainy, testx, probe_name, topk=0, feature_names=None, cv=3, rounds=3):
+    from DMF.Stacking import StackingBaseModel
+    newtrain = np.zeros(shape=(trainx.shape[0],))
+    newtest = np.zeros(shape=(testx.shape[0],))
+
+    for _i in range(rounds):
+        stack = StackingBaseModel(model, "catboost", None, cv, use_valid=False, random_state=2018 * _i,
+                                  top_k_origin_feature=topk)
+        stack.set_feature_names(feature_names)
+        _ntest = stack.fit_transfrom(trainx, trainy, testx)
+        _ntrain = stack.trainx_
+        newtrain += _ntrain[:, 0]
+        newtest += _ntest[:, 0]
+    newtrain /= rounds
+    newtest /= rounds
+    topkfname = stack.topk_feature_name
+    dftrain = pd.DataFrame(newtrain)
+    dftest = pd.DataFrame(newtest)
+    dftrain.columns = [probe_name + "_probe"]
+    dftest.columns = [probe_name + "_probe"]
+    df1 = pd.concat([dftrain, dftest], axis=0).reset_index(drop=True)
+    if (topkfname is not None):
+        newtrain2 = _ntrain[:, 1:]
+        newtest2 = _ntest[:, 1:]
+        dftrain2 = pd.DataFrame(newtrain2)
+        dftest2 = pd.DataFrame(newtest2)
+        dftrain2.columns = topkfname
+        dftest2.columns = topkfname
+        df2 = pd.concat([dftrain2, dftest2], axis=0).reset_index(drop=True)
+        df1 = concat([df1, df2])
+    return df1
+
+def sklearn_stacking_feature(model, trainx, trainy, testx, probe_name, topk=0, feature_names=None, cv=3, rounds=3):
+    from DMF.Stacking import StackingBaseModel
+    newtrain = np.zeros(shape=(trainx.shape[0],))
+    newtest = np.zeros(shape=(testx.shape[0],))
+
+    for _i in range(rounds):
+        stack = StackingBaseModel(model, "sklearn", None, cv, use_valid=False, random_state=2018 * _i,
+                                  top_k_origin_feature=topk)
+        stack.set_feature_names(feature_names)
+        _ntest = stack.fit_transfrom(trainx, trainy, testx)
+        _ntrain = stack.trainx_
+        newtrain += _ntrain[:, 0]
+        newtest += _ntest[:, 0]
+    newtrain /= rounds
+    newtest /= rounds
+    topkfname = stack.topk_feature_name
+    dftrain = pd.DataFrame(newtrain)
+    dftest = pd.DataFrame(newtest)
+    dftrain.columns = [probe_name + "_probe"]
+    dftest.columns = [probe_name + "_probe"]
+    df1 = pd.concat([dftrain, dftest], axis=0).reset_index(drop=True)
+    if (topkfname is not None):
+        newtrain2 = _ntrain[:, 1:]
+        newtest2 = _ntest[:, 1:]
+        dftrain2 = pd.DataFrame(newtrain2)
+        dftest2 = pd.DataFrame(newtest2)
+        dftrain2.columns = topkfname
+        dftest2.columns = topkfname
+        df2 = pd.concat([dftrain2, dftest2], axis=0).reset_index(drop=True)
+        df1 = concat([df1, df2])
+    return df1
+
 
 def encode_vt(train_df, test_df, variable, target):
     col_name = "_".join([variable, target])
@@ -436,6 +538,10 @@ def encode_vt(train_df, test_df, variable, target):
         df = test_df[[variable]].merge(grouped, 'left', variable)[col_name]
         df = np.asarray(df, dtype=np.float32)
     return df
+
+def mkpath(path):
+    if(not os.path.exists(path)):
+        os.mkdir(path)
 
 
 if __name__ == '__main__':

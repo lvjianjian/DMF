@@ -15,6 +15,7 @@ import numpy as np
 import pandas as pd
 import os
 import lightgbm as lgb
+import xgboost as xgb
 from sklearn.model_selection import KFold, StratifiedKFold,train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
@@ -156,7 +157,6 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
                         num_boost_round=num_boost_round)
     return gbm
 
-
 def lgb_predict(trainx, trainy, testx,
                 params, use_valid=True, valid_ratio=0.2, validx=None,
                 validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
@@ -171,6 +171,85 @@ def lgb_predict(trainx, trainy, testx,
         return np.concatenate([preds]).T
     else:
         return lgb_train(trainx, trainy, testx, params.copy(), use_valid, valid_ratio,
+                         validx, validy, num_boost_round, early_stopping_rounds, random_state, predict_prob)
+
+def xgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
+              validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
+              predict_prob=True, feature_importances=None,model_save_file=None,
+              feature_names=None):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
+    gbm = xgb_train_model(trainx, trainy, params, use_valid, valid_ratio, validx, validy,
+                          num_boost_round, early_stopping_rounds, random_state, feature_names)
+    if(model_save_file is not None):
+        gbm.save_model(model_save_file)
+    if(type(feature_importances) == list):
+        names, importances = zip(*(sorted(gbm.get_fscore().items(), key=lambda x: -x[1])))
+        feature_importances += list((zip(names, importances)))
+    return predict(gbm, "xgb", testx, predict_proba=predict_prob)
+
+
+def xgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, validx=None,
+                    validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
+
+                    feature_names=None):
+    """
+    xgb train 返回train的model
+    :param trainx:
+    :param trainy:
+    :param params:
+    :param use_valid:
+    :param valid_ratio:
+    :param validx:
+    :param validy:
+    :param num_boost_round:
+    :param early_stopping_rounds:
+    :param random_state:
+    :return:
+    """
+    if use_valid:
+        if (validx is None):
+            trainx, validx, trainy, validy = train_test_split(trainx,
+                                                              trainy,
+                                                              test_size=valid_ratio,
+                                                              random_state=random_state)
+        xgb_train_ = xgb.DMatrix(trainx, trainy, feature_names=feature_names)
+        del trainx
+        del trainy
+        gc.collect()
+        xgb_eval = xgb.DMatrix(validx, validy, feature_names=feature_names)
+        del validx
+        del validy
+        gc.collect()
+        params_copy = params.copy()
+        gbm = xgb.train(params_copy,
+                        xgb_train_,
+                        num_boost_round=num_boost_round,
+                        evals=xgb_eval,
+                        early_stopping_rounds=early_stopping_rounds)
+    else:
+        xgb_train_ = xgb.DMatrix(trainx, trainy, feature_names=feature_names)
+        del trainx
+        del trainy
+        gc.collect()
+        params_copy = params.copy()
+        gbm = xgb.train(params_copy,
+                        xgb_train_,
+                        num_boost_round=num_boost_round)
+    return gbm
+
+def xgb_predict(trainx, trainy, testx,
+                params, use_valid=True, valid_ratio=0.2, validx=None,
+                validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
+                predict_prob=False):
+    label_size = _get_label_size(trainy)
+    if (label_size > 1):
+        preds = []
+        for i in range(label_size):
+            pred = xgb_train(trainx, trainy[:, i], testx, params.copy(), use_valid, valid_ratio,
+                             validx, validy, num_boost_round, early_stopping_rounds, random_state, predict_prob)
+            preds.append(pred)
+        return np.concatenate([preds]).T
+    else:
+        return xgb_train(trainx, trainy, testx, params.copy(), use_valid, valid_ratio,
                          validx, validy, num_boost_round, early_stopping_rounds, random_state, predict_prob)
 
 
@@ -274,6 +353,9 @@ def predict(trained_model, model_name, testx, predict_proba=True):
             exit(1)
         if (predict_proba):
             return trained_model.predict(testx, iteration)
+    elif (model_name == 'xgb'):
+        testDM = xgb.DMatrix(testx)
+        return trained_model.predict(testDM)
     else:
         if(model_name == "catboost"):
             testx = transform_float_to_int_for_narrayx(testx, trained_model.cates)
