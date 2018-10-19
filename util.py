@@ -421,6 +421,7 @@ def lgb_stacking_feature(params, trainx, trainy, testx, probe_name, topk=0, feat
         df1 = concat([df1, df2])
     return df1
 
+
 def xgb_stacking_feature(params, trainx, trainy, testx, probe_name, topk=0, feature_names=None, cv=3, rounds=3):
     from DMF.Stacking import StackingBaseModel
     newtrain = np.zeros(shape=(trainx.shape[0],))
@@ -486,6 +487,7 @@ def catboost_stacking_feature(model, trainx, trainy, testx, probe_name, topk=0, 
         df1 = concat([df1, df2])
     return df1
 
+
 def sklearn_stacking_feature(model, trainx, trainy, testx, probe_name, topk=0, feature_names=None, cv=3, rounds=3):
     from DMF.Stacking import StackingBaseModel
     newtrain = np.zeros(shape=(trainx.shape[0],))
@@ -520,27 +522,45 @@ def sklearn_stacking_feature(model, trainx, trainy, testx, probe_name, topk=0, f
 
 
 def encode_vt(train_df, test_df, variable, target):
-    col_name = "_".join([variable, target])
-    if target != 'playing_time':
-        grouped = train_df.groupby(variable, as_index=False)[target].agg({"C": "size", "V": "sum"})
-        print('start smooth')
-        hyper = HyperParam(1, 1)
-        C = grouped['C']
-        V = grouped['V']
-        hyper.update_from_data_by_moment(C, V)
-        print('end smooth')
-        grouped[col_name] = (hyper.alpha + V) / (hyper.alpha + hyper.beta + C)
-        grouped[col_name] = grouped[col_name].astype('float32')
-        df = test_df[[variable]].merge(grouped, 'left', variable)[col_name]
-        df = np.asarray(df, dtype=np.float32)
-    else:
-        grouped = train_df.groupby(variable, as_index=False)[target].agg({col_name: "mean"})
-        df = test_df[[variable]].merge(grouped, 'left', variable)[col_name]
-        df = np.asarray(df, dtype=np.float32)
+    if (type(variable) != list):
+        variable = [variable]
+    variable = list(variable)
+    col_name = "_".join(variable)
+    col_name = col_name + "_" + target
+    grouped = train_df.groupby(variable, as_index=False)[target].agg({"C": "size", "V": "sum"})
+    print('start smooth')
+    hyper = HyperParam(1, 1)
+    C = grouped['C']
+    V = grouped['V']
+    hyper.update_from_data(C, V)
+    print('end smooth')
+    grouped[col_name] = (hyper.alpha + V) / (hyper.alpha + hyper.beta + C)
+    grouped[col_name] = grouped[col_name].astype('float32')
+    df = test_df[variable].merge(grouped, 'left', variable)[col_name]
+    df = np.asarray(df, dtype=np.float32)
     return df
 
+
+def transform(id_cate, target, train, test):
+    if (type(id_cate) != list):
+        id_cate = [id_cate]
+    print("%s unique num: %s" % (id_cate, train[id_cate].nunique()))
+    col_name = "_".join(list(id_cate))
+    col_name = col_name + "_" + target + "_ctr"
+    bayes_feature = encode_vt(train, test, id_cate, target)
+    test[col_name] = bayes_feature
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=2018)
+    for i, (train_idx, test_idx) in enumerate(skf.split(np.zeros(len(train)), train[target])):
+        print(id_cate, target, i)
+        X_train = train.iloc[train_idx]
+        X_test = train.iloc[test_idx]
+        bayes_feature = encode_vt(X_train, X_test, id_cate, target)
+        train.ix[train.iloc[test_idx].index, col_name] = bayes_feature
+    return train[[col_name]], test[[col_name]]
+
+
 def mkpath(path):
-    if(not os.path.exists(path)):
+    if (not os.path.exists(path)):
         os.mkdir(path)
 
 

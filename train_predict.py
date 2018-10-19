@@ -361,7 +361,7 @@ def predict(trained_model, model_name, testx, predict_proba=True):
             testx = transform_float_to_int_for_narrayx(testx, trained_model.cates)
 
         if (predict_proba):
-            return trained_model.predict_proba(testx)
+            return trained_model.predict_proba(testx)[:, 1]
         else:
             return trained_model.predict(testx)
 
