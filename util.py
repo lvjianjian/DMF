@@ -26,6 +26,7 @@ import contextlib
 from contextlib import contextmanager
 from itertools import product
 from DMF.smooth import HyperParam
+
 MAX_DIS_FUNCTION = []
 
 
@@ -41,15 +42,18 @@ def performance(f):  # 定义装饰器函数，功能是传进来的函数进行
 
     return fn  # 调用包装后的函数
 
+
 def checkpath(f):
     # 检查一下用来存放checkpoint的path是否存在了
     @functools.wraps(f)
     def fn(*args, **kw):
         if 'checkpath' in args[0].keys():
-            if os.path.exists(args[0]['checkpath'])==False:
+            if os.path.exists(args[0]['checkpath']) == False:
                 os.makedirs(args[0]['checkpath'])
         f(*args, **kw)
+
     return fn
+
 
 def dump_feature(f):  # 定义装饰器函数，功能是传进来的函数进行包装并返回包装后的函数
     @functools.wraps(f)
@@ -80,10 +84,14 @@ def dump_feature(f):  # 定义装饰器函数，功能是传进来的函数进�
         t_end = time.time()
         print('call %s() in %fs' % (f.__name__, (t_end - t_start)))
         return r
+
     return fn
 
 
-MAIN_ID = ["uid", "pid"]
+MAIN_ID = ["query", "title", "tag"]
+SORT_ID = ['_index']
+
+
 def dump_feature_remove_main_id(f):  # 定义装饰器函数，功能是传进来的函数进行包装并返回包装后的函数
     @functools.wraps(f)
     def fn(*args, **kw):  # 对传进来的函数进行包装的函数
@@ -104,11 +112,15 @@ def dump_feature_remove_main_id(f):  # 定义装饰器函数，功能是传进�
             downcast(r)
         else:
             r = f(*args, **kw)
-            r.sort_values(by=MAIN_ID, inplace=True)
+            r.sort_values(by=SORT_ID, inplace=True)
             # remove main id
-            if(f.__name__ != 'click_label'):
+            if (f.__name__ != 'click_label'):
                 for _c in MAIN_ID:
-                    del r[_c]
+                    if (_c in r.columns):
+                        del r[_c]
+                for _c in SORT_ID:
+                    if (_c in r.columns):
+                        del r[_c]
             # down bit
             for c in r.columns:
                 if r[c].dtype == 'float64':
@@ -119,7 +131,9 @@ def dump_feature_remove_main_id(f):  # 定义装饰器函数，功能是传进�
         t_end = time.time()
         print('call %s() in %fs' % (f.__name__, (t_end - t_start)))
         return r
+
     return fn
+
 
 # 合并节约内存
 @performance
@@ -132,16 +146,14 @@ def concat(L):
             result[l.columns.tolist()] = l
     return result
 
-# def check_labeled_existing(f):
-#     @functools.wraps(f)
-#     def fn(*args, **kw):
-#         if 
 
 def log(labels):
     return np.log(labels + 1)
 
+
 def exp(labels):
     return np.exp(labels) - 1
+
 
 def euclidean(values1, values2):
     """
@@ -161,8 +173,9 @@ def cosine(values1, values2):
     :return:
     """
     return np.sum((values1 * values2), axis=1) / (np.sqrt(np.sum(values1 ** 2, axis=1)) * np.sqrt(np.sum(values2 ** 2)))
-MAX_DIS_FUNCTION.append(cosine)
 
+
+MAX_DIS_FUNCTION.append(cosine)
 
 
 def optm_cosine(v1, v2):
@@ -171,8 +184,13 @@ def optm_cosine(v1, v2):
     """
     n_samples, f_features = v1.shape
     n_centers, f_features = v2.shape
-    return np.dot(v1, v2.T) / np.dot(np.linalg.norm(v1, axis=1).reshape(n_samples, -1), np.linalg.norm(v2, axis=1).reshape(-1, n_centers))
+    return np.dot(v1, v2.T) / np.dot(np.linalg.norm(v1, axis=1).reshape(n_samples, -1),
+                                     np.linalg.norm(v2, axis=1).reshape(-1, n_centers))
+
+
 MAX_DIS_FUNCTION.append(optm_cosine)
+
+
 # 过滤缺失值过多的特征
 def filter_feature_by_missing(df, origin_feature_names, threshold=0.95):
     """
@@ -242,7 +260,8 @@ def filter_feature_which_0std(df, origin_feature_names):
                 stay_feature_name.append(_f)
     return remove_feature_name, stay_feature_name
 
-def fill_feature(df, fill_features, cate_method="mode", num_method="median", other_fill_value=-1, threshold = 0.01):
+
+def fill_feature(df, fill_features, cate_method="mode", num_method="median", other_fill_value=-1, threshold=0.01):
     """
     填充缺失率小于threshold的列，mode 为众数填充，median为中位数填充，mean为均值填充
     超过threshold的填充-1
@@ -257,16 +276,16 @@ def fill_feature(df, fill_features, cate_method="mode", num_method="median", oth
         nan_size = df[_f].isnull().sum()
         nan_ratio = float(nan_size) / df.shape[0]
         if nan_ratio < threshold:
-            if(df[_f].dtypes == object):
-                if(cate_method == "mode"):
+            if (df[_f].dtypes == object):
+                if (cate_method == "mode"):
                     df[_f] = df[_f].fillna(df[_f].mode()[0])
                 else:
                     print("error fill cate method", num_method)
                     exit(1)
             else:
-                if(num_method == "median"):
+                if (num_method == "median"):
                     df[_f] = df[_f].fillna(df[_f].median())
-                elif(num_method == "mean"):
+                elif (num_method == "mean"):
                     df[_f] = df[_f].fillna(df[_f].mean())
                 else:
                     print("error fill num method", num_method)
@@ -275,6 +294,7 @@ def fill_feature(df, fill_features, cate_method="mode", num_method="median", oth
             df[_f] = df[_f].fillna(other_fill_value)
 
     return df
+
 
 def detect_cate_columns(df, detect_columns):
     """
@@ -320,6 +340,7 @@ def train_test_split_stratifiedKFold(n_split, random_state, shuffle, target_df, 
         splits.append((_x, _y))
     return splits
 
+
 def detect_cates_for_narrayx(x, threshold=10):
     """
     将数量小于等于threshold的认为 是cate列
@@ -329,11 +350,12 @@ def detect_cates_for_narrayx(x, threshold=10):
     """
     cates = []
     for _i in range(x.shape[1]):
-        if(len(np.unique(x[:, _i])) <= threshold):
-            if(np.isnan(x[:, _i]).sum()==0):
+        if (len(np.unique(x[:, _i])) <= threshold):
+            if (np.isnan(x[:, _i]).sum() == 0):
                 x[:, _i] = x[:, _i].astype(int)
                 cates.append(_i)
     return cates
+
 
 def transform_float_to_int_for_narrayx(x, cates):
     """
@@ -347,24 +369,27 @@ def transform_float_to_int_for_narrayx(x, cates):
         x[:, _i] = x[:, _i].astype(int)
     return x
 
+
 def downcast(df):
     """
     降位
     :param df:
     :return:
     """
-    print (df.info(memory_usage='deep'))
+    print(df.info(memory_usage='deep'))
     df_int = df.select_dtypes(include=['int64', 'int32']).apply(pd.to_numeric, downcast='integer')
     df[df_int.columns] = df_int
-    del df_int; gc.collect()
-    print (df.info(memory_usage='deep'))
+    del df_int;
+    gc.collect()
+    print(df.info(memory_usage='deep'))
     df_float64 = df.select_dtypes(include=['float64']).apply(pd.to_numeric, downcast='float')
     df[df_float64.columns] = df_float64
-    del df_float64; gc.collect()
-    print (df.info(memory_usage='deep'))
+    del df_float64;
+    gc.collect()
+    print(df.info(memory_usage='deep'))
 
 
-def lgb_stacking_feature(params,trainx,trainy,testx,probe_name,topk=0,feature_names=None,cv=3,rounds=3):
+def lgb_stacking_feature(params, trainx, trainy, testx, probe_name, topk=0, feature_names=None, cv=3, rounds=3):
     from DMF.Stacking import StackingBaseModel
     newtrain = np.zeros(shape=(trainx.shape[0],))
     newtest = np.zeros(shape=(testx.shape[0],))
@@ -382,10 +407,109 @@ def lgb_stacking_feature(params,trainx,trainy,testx,probe_name,topk=0,feature_na
     topkfname = stack.topk_feature_name
     dftrain = pd.DataFrame(newtrain)
     dftest = pd.DataFrame(newtest)
-    dftrain.columns = [probe_name+"_probe"]
-    dftest.columns = [probe_name+"_probe"]
+    dftrain.columns = [probe_name + "_probe"]
+    dftest.columns = [probe_name + "_probe"]
     df1 = pd.concat([dftrain, dftest], axis=0).reset_index(drop=True)
-    if(topkfname is not None):
+    if (topkfname is not None):
+        newtrain2 = _ntrain[:, 1:]
+        newtest2 = _ntest[:, 1:]
+        dftrain2 = pd.DataFrame(newtrain2)
+        dftest2 = pd.DataFrame(newtest2)
+        dftrain2.columns = topkfname
+        dftest2.columns = topkfname
+        df2 = pd.concat([dftrain2, dftest2], axis=0).reset_index(drop=True)
+        df1 = concat([df1, df2])
+    return df1
+
+
+def xgb_stacking_feature(params, trainx, trainy, testx, probe_name, topk=0, feature_names=None, cv=3, rounds=3):
+    from DMF.Stacking import StackingBaseModel
+    newtrain = np.zeros(shape=(trainx.shape[0],))
+    newtest = np.zeros(shape=(testx.shape[0],))
+
+    for _i in range(rounds):
+        stack = StackingBaseModel(None, "xgb", params, cv, use_valid=False, random_state=2018 * _i,
+                                  top_k_origin_feature=topk)
+        stack.set_feature_names(feature_names)
+        _ntest = stack.fit_transfrom(trainx, trainy, testx)
+        _ntrain = stack.trainx_
+        newtrain += _ntrain[:, 0]
+        newtest += _ntest[:, 0]
+    newtrain /= rounds
+    newtest /= rounds
+    topkfname = stack.topk_feature_name
+    dftrain = pd.DataFrame(newtrain)
+    dftest = pd.DataFrame(newtest)
+    dftrain.columns = [probe_name + "_probe"]
+    dftest.columns = [probe_name + "_probe"]
+    df1 = pd.concat([dftrain, dftest], axis=0).reset_index(drop=True)
+    if (topkfname is not None):
+        newtrain2 = _ntrain[:, 1:]
+        newtest2 = _ntest[:, 1:]
+        dftrain2 = pd.DataFrame(newtrain2)
+        dftest2 = pd.DataFrame(newtest2)
+        dftrain2.columns = topkfname
+        dftest2.columns = topkfname
+        df2 = pd.concat([dftrain2, dftest2], axis=0).reset_index(drop=True)
+        df1 = concat([df1, df2])
+    return df1
+
+
+def catboost_stacking_feature(model, trainx, trainy, testx, probe_name, topk=0, feature_names=None, cv=3, rounds=3):
+    from DMF.Stacking import StackingBaseModel
+    newtrain = np.zeros(shape=(trainx.shape[0],))
+    newtest = np.zeros(shape=(testx.shape[0],))
+
+    for _i in range(rounds):
+        stack = StackingBaseModel(model, "catboost", None, cv, use_valid=False, random_state=2018 * _i,
+                                  top_k_origin_feature=topk)
+        stack.set_feature_names(feature_names)
+        _ntest = stack.fit_transfrom(trainx, trainy, testx)
+        _ntrain = stack.trainx_
+        newtrain += _ntrain[:, 0]
+        newtest += _ntest[:, 0]
+    newtrain /= rounds
+    newtest /= rounds
+    topkfname = stack.topk_feature_name
+    dftrain = pd.DataFrame(newtrain)
+    dftest = pd.DataFrame(newtest)
+    dftrain.columns = [probe_name + "_probe"]
+    dftest.columns = [probe_name + "_probe"]
+    df1 = pd.concat([dftrain, dftest], axis=0).reset_index(drop=True)
+    if (topkfname is not None):
+        newtrain2 = _ntrain[:, 1:]
+        newtest2 = _ntest[:, 1:]
+        dftrain2 = pd.DataFrame(newtrain2)
+        dftest2 = pd.DataFrame(newtest2)
+        dftrain2.columns = topkfname
+        dftest2.columns = topkfname
+        df2 = pd.concat([dftrain2, dftest2], axis=0).reset_index(drop=True)
+        df1 = concat([df1, df2])
+    return df1
+
+
+def sklearn_stacking_feature(model, trainx, trainy, testx, probe_name, topk=0, feature_names=None, cv=3, rounds=3):
+    from DMF.Stacking import StackingBaseModel
+    newtrain = np.zeros(shape=(trainx.shape[0],))
+    newtest = np.zeros(shape=(testx.shape[0],))
+
+    for _i in range(rounds):
+        stack = StackingBaseModel(model, "sklearn", None, cv, use_valid=False, random_state=2018 * _i,
+                                  top_k_origin_feature=topk)
+        stack.set_feature_names(feature_names)
+        _ntest = stack.fit_transfrom(trainx, trainy, testx)
+        _ntrain = stack.trainx_
+        newtrain += _ntrain[:, 0]
+        newtest += _ntest[:, 0]
+    newtrain /= rounds
+    newtest /= rounds
+    topkfname = stack.topk_feature_name
+    dftrain = pd.DataFrame(newtrain)
+    dftest = pd.DataFrame(newtest)
+    dftrain.columns = [probe_name + "_probe"]
+    dftest.columns = [probe_name + "_probe"]
+    df1 = pd.concat([dftrain, dftest], axis=0).reset_index(drop=True)
+    if (topkfname is not None):
         newtrain2 = _ntrain[:, 1:]
         newtest2 = _ntest[:, 1:]
         dftrain2 = pd.DataFrame(newtrain2)
@@ -398,24 +522,47 @@ def lgb_stacking_feature(params,trainx,trainy,testx,probe_name,topk=0,feature_na
 
 
 def encode_vt(train_df, test_df, variable, target):
-    col_name = "_".join([variable, target])
-    if target != 'playing_time':
-        grouped = train_df.groupby(variable, as_index=False)[target].agg({"C": "size", "V": "sum"})
-        print ('start smooth')
-        hyper = HyperParam(1, 1)
-        C = grouped['C']
-        V = grouped['V']
-        hyper.update_from_data_by_moment(C, V)
-        print ('end smooth')
-        grouped[col_name] = (hyper.alpha + V) / (hyper.alpha + hyper.beta + C)
-        grouped[col_name] = grouped[col_name].astype('float32')
-        df = test_df[[variable]].merge(grouped, 'left', variable)[col_name]
-        df = np.asarray(df, dtype=np.float32)
-    else:
-        grouped = train_df.groupby(variable, as_index=False)[target].agg({col_name: "mean"})
-        df = test_df[[variable]].merge(grouped, 'left', variable)[col_name]
-        df = np.asarray(df, dtype=np.float32)        
+    if (type(variable) != list):
+        variable = [variable]
+    variable = list(variable)
+    col_name = "_".join(variable)
+    col_name = col_name + "_" + target
+    grouped = train_df.groupby(variable, as_index=False)[target].agg({"C": "size", "V": "sum"})
+    print('start smooth')
+    hyper = HyperParam(1, 1)
+    C = grouped['C']
+    V = grouped['V']
+    hyper.update_from_data(C, V)
+    print('end smooth')
+    grouped[col_name] = (hyper.alpha + V) / (hyper.alpha + hyper.beta + C)
+    grouped[col_name] = grouped[col_name].astype('float32')
+    df = test_df[variable].merge(grouped, 'left', variable)[col_name]
+    df = np.asarray(df, dtype=np.float32)
     return df
+
+
+def transform(id_cate, target, train, test):
+    if (type(id_cate) != list):
+        id_cate = [id_cate]
+    print("%s unique num: %s" % (id_cate, train[id_cate].nunique()))
+    col_name = "_".join(list(id_cate))
+    col_name = col_name + "_" + target + "_ctr"
+    bayes_feature = encode_vt(train, test, id_cate, target)
+    test[col_name] = bayes_feature
+    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=2018)
+    for i, (train_idx, test_idx) in enumerate(skf.split(np.zeros(len(train)), train[target])):
+        print(id_cate, target, i)
+        X_train = train.iloc[train_idx]
+        X_test = train.iloc[test_idx]
+        bayes_feature = encode_vt(X_train, X_test, id_cate, target)
+        train.ix[train.iloc[test_idx].index, col_name] = bayes_feature
+    return train[[col_name]], test[[col_name]]
+
+
+def mkpath(path):
+    if (not os.path.exists(path)):
+        os.mkdir(path)
+
 
 if __name__ == '__main__':
     print(cosine(np.asarray([[1, 2, 3], [2, 5, 10], [2, 4, 6]]), np.asarray([1, 2, 3])))
