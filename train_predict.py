@@ -184,7 +184,7 @@ def xgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, va
     if(type(feature_importances) == list):
         names, importances = zip(*(sorted(gbm.get_fscore().items(), key=lambda x: -x[1])))
         feature_importances += list((zip(names, importances)))
-    return predict(gbm, "xgb", testx, predict_proba=predict_prob)
+    return predict(gbm, "xgb", testx, predict_proba=predict_prob,feature_names=feature_names)
 
 
 def xgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, validx=None,
@@ -343,7 +343,7 @@ def catboost_train(model, trainx, trainy, testx, cate_threshold=10, predict_prob
     return predict(model, "catboost", testx, predict_proba)
 
 
-def predict(trained_model, model_name, testx, predict_proba=True):
+def predict(trained_model, model_name, testx, predict_proba=True, feature_names=None):
     if (model_name == "lgb"):
         iteration = trained_model.best_iteration
         if (iteration <= 0):
@@ -354,7 +354,7 @@ def predict(trained_model, model_name, testx, predict_proba=True):
         if (predict_proba):
             return trained_model.predict(testx, iteration)
     elif (model_name == 'xgb'):
-        testDM = xgb.DMatrix(testx)
+        testDM = xgb.DMatrix(testx, feature_names=feature_names)
         return trained_model.predict(testDM)
     else:
         if(model_name == "catboost"):
