@@ -19,7 +19,14 @@ import numpy as np
 from sklearn.decomposition import IncrementalPCA, TruncatedSVD, LatentDirichletAllocation, NMF
 import scipy
 from sklearn.feature_extraction.text import CountVectorizer
+# from DMF.data import *
+import jieba
 
+def split_word_list(word_list, split_mode=False):
+    seg_list = []
+    for word in word_list:
+        seg_list.extend(jieba.cut(word, cut_all=split_mode))       
+    return seg_list
 
 def _decomposition_ipca(df, pca_length, decom_col_name):
     if (len(df.columns) != 2):
@@ -45,7 +52,6 @@ def _decomposition_ipca(df, pca_length, decom_col_name):
     newdf = pd.DataFrame({columns[0]: df[columns[0]], "{}_deto_{}".format(decom_col_name, pca_length): list(newalls)})
     return newdf
 
-
 def decomposition_ipca(dataPath, origin_pickle_name, pca_length, decom_col_name=None):
     """
     对 origin_pickle_name
@@ -65,7 +71,6 @@ def decomposition_ipca(dataPath, origin_pickle_name, pca_length, decom_col_name=
         newdf.to_pickle(newPath)
         f = newdf
     return f
-
 
 def simple_countVectorizer(df, dataPath, cate1, cate2, min_df=2):
     if not os.path.exists(os.path.join(dataPath, 'cache/')):
@@ -99,6 +104,44 @@ def simple_countVectorizer(df, dataPath, cate1, cate2, min_df=2):
         cate1s = np.load(cate1s_file)['cate1s']
         return list(cate1s), cate2_as_matrix
 
+def simple_splitword_countVectorizer(df, dataPath, cate1, cate2, min_df=2, split_mode=False):
+    # 对 cate2 分词
+    # TODO     
+    # 根据 query_prediction 提取出现次数最大的词语，基于这个词进行embedding（关键字embedding）
+    # 关键字在 title 中的占比
+    # 将关键字视为真正意图的title, tag基于这个关键字embedding，反之也做一遍
+    if not os.path.exists(os.path.join(dataPath, 'cache/')):
+        os.mkdir(os.path.join(dataPath, 'cache/'))
+    sentence_file = os.path.join(dataPath,
+                                 'cache/%s_%s_mindf_%d_splitmode_%s_Simple_Split_Word_CountVectorizer_vector.npz' % (cate1, cate2, min_df, split_mode))
+    cate1s_file = os.path.join(dataPath,
+                               'cache/%s_%s_mindf_%d_splitmode_%s_Simple_Split_Word_CountVectorizer_cate1s.npz' % (cate1, cate2, min_df, split_mode))
+    if (not os.path.exists(sentence_file)) or (not os.path.exists(cate1s_file)):
+        # 保证文件内容的是一致的 不能有错位
+        if os.path.exists(sentence_file):
+            os.remove(sentence_file)
+        if os.path.exists(cate1s_file):
+            os.remove(cate1s_file)
+
+        mapping = {}
+        for cate in df[cate1].unique():
+            mapping.setdefault(cate, []).extend(split_word_list(df[df[cate1]==cate][cate2].values, split_mode))
+        # for sample in df[[cate1, cate2]].astype(str).values:
+            # mapping.setdefault(sample[0], []).extend(split_word_list(sample[1], split_mode))
+        cate1s = list(mapping.keys())
+        cate2_as_sentence = [' '.join(mapping[cate]) for cate in cate1s]
+        del mapping;
+        gc.collect()
+
+        cate2_as_matrix = CountVectorizer(token_pattern='(?u)\\b\\w+\\b',
+                                          min_df=min_df).fit_transform(cate2_as_sentence)
+        scipy.sparse.save_npz(sentence_file, cate2_as_matrix)
+        np.savez(cate1s_file, cate1s=cate1s)
+        return cate1s, cate2_as_matrix
+    else:
+        cate2_as_matrix = scipy.sparse.load_npz(sentence_file)
+        cate1s = np.load(cate1s_file)['cate1s']
+        return list(cate1s), cate2_as_matrix
 
 class CateEmbedding(object):
     def __init__(self, main_id=None):
@@ -358,7 +401,7 @@ class CateEmbedding(object):
             topics_of_cate1[cate1] = cate1s
             del cate1s;
             gc.collect()
-            print(topics_of_cate1.head(3))
+            # print(topics_of_cate1.head(3))
             del df;
             gc.collect()
             topics_of_cate1.to_feather(embedding_query_file)
@@ -395,3 +438,62 @@ class CateEmbedding(object):
     def svd_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, tol=0., n_iter=5):
         svd = TruncatedSVD(n_components, random_state=2018, tol=tol, n_iter=n_iter)
         return self._embedding(dataPath, df, cate1, cate2, svd, "svd", n_components=n_components, min_df=min_df)
+
+    def split_word_lda_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, batch_size=520, n_jobs=20, split_mode=False):
+        '''
+        此部分是做cate1 cate2的相关embedding,这里只要共同show过的都算相关
+        '''
+        lda = LatentDirichletAllocation(n_components=n_components,
+                                        learning_method='online',
+                                        batch_size=batch_size,
+                                        random_state=2018,
+                                        n_jobs=n_jobs
+                                        )
+
+        return self._split_word_embedding(dataPath, df, cate1, cate2, lda, "lda", n_components=n_components, min_df=min_df, split_mode=split_mode)
+
+    def split_word_nmf_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2,
+                      max_iter=1000, alpha=.1, l1_ratio=.5, split_mode=False):
+        nmf = NMF(n_components=n_components,
+                  random_state=2018,
+                  beta_loss='kullback-leibler',
+                  solver='mu',
+                  max_iter=max_iter,
+                  alpha=alpha,
+                  l1_ratio=l1_ratio)
+
+        return self._split_word_embedding(dataPath, df, cate1, cate2, nmf, "nmf", n_components=n_components, min_df=min_df, split_mode=split_mode)
+
+    def split_word_svd_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, tol=0., n_iter=5, split_mode=False):
+        svd = TruncatedSVD(n_components, random_state=2018, tol=tol, n_iter=n_iter)
+        return self._split_word_embedding(dataPath, df, cate1, cate2, svd, "svd", n_components=n_components, min_df=min_df, split_mode=split_mode)
+
+    def _split_word_embedding(self, dataPath, df, cate1, cate2, method, method_name, n_components=16, min_df=2, split_mode=False):
+            embedding_query_file = os.path.join(dataPath,
+                                                'cache/%s_%s_nc_%d_mindf_%d_%s_split_word_embedding.feather' % (
+                                                    cate1, cate2, n_components, min_df, method_name))
+
+            if not os.path.exists(embedding_query_file):
+                if not os.path.exists(os.path.join(dataPath, 'cache/')):
+                    os.mkdir(os.path.join(dataPath, 'cache/'))
+
+                cate1s, cate2_as_matrix = simple_splitword_countVectorizer(df, dataPath, cate1, cate2, min_df=min_df, split_mode=split_mode)
+                topics_of_cate1 = method.fit_transform(cate2_as_matrix)
+                del cate2_as_matrix;
+                gc.collect()
+
+                topics_of_cate1 = pd.DataFrame(topics_of_cate1,
+                                               columns=["%s_%s_%s_%s_split_word" % (cate1, cate2, i, method_name) for i in
+                                                        range(n_components)]).astype('float32')
+
+                topics_of_cate1[cate1] = cate1s
+                del cate1s;
+                gc.collect()
+                del df;
+                gc.collect()
+                topics_of_cate1.to_feather(embedding_query_file)
+                return topics_of_cate1
+            else:
+                topics_of_cate1 = pd.read_feather(embedding_query_file)
+                return topics_of_cate1
+

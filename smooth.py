@@ -64,7 +64,7 @@ class HyperParam(object):
         self.alpha = (mean + 0.000001) * ((mean + 0.000001) * (1.000001 - mean) / (var + 0.000001) - 1)
         self.beta = (1.000001 - mean) * ((mean + 0.000001) * (1.000001 - mean) / (var + 0.000001) - 1)
 
-    def __compute(self, all_num, click_num):
+    def  __compute(self, all_num, click_num):
         '''moment estimation'''
         mean = (click_num / all_num).mean()
         if len(all_num) == 1:

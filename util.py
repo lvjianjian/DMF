@@ -26,6 +26,8 @@ import contextlib
 from contextlib import contextmanager
 from itertools import product
 from DMF.smooth import HyperParam
+import jieba
+
 
 MAX_DIS_FUNCTION = []
 
@@ -521,43 +523,58 @@ def sklearn_stacking_feature(model, trainx, trainy, testx, probe_name, topk=0, f
     return df1
 
 
-def encode_vt(train_df, test_df, variable, target):
+def encode_vt(train_df, test_df, variable, target, use_bayes=True):
     if (type(variable) != list):
         variable = [variable]
     variable = list(variable)
     col_name = "_".join(variable)
     col_name = col_name + "_" + target
     grouped = train_df.groupby(variable, as_index=False)[target].agg({"C": "size", "V": "sum"})
-    print('start smooth')
-    hyper = HyperParam(1, 1)
     C = grouped['C']
     V = grouped['V']
-    hyper.update_from_data(C, V)
-    print('end smooth')
-    grouped[col_name] = (hyper.alpha + V) / (hyper.alpha + hyper.beta + C)
+    if(use_bayes):
+        print('start smooth')
+        hyper = HyperParam(1, 1)
+        hyper.update_from_data(C, V)
+        print('end smooth')
+        grouped[col_name] = (hyper.alpha + V) / (hyper.alpha + hyper.beta + C)
+    else:
+        grouped[col_name] = V / C
     grouped[col_name] = grouped[col_name].astype('float32')
     df = test_df[variable].merge(grouped, 'left', variable)[col_name]
     df = np.asarray(df, dtype=np.float32)
     return df
 
 
-def transform(id_cate, target, train, test):
+def transform(id_cate, target, train, test, use_bayes_smooth=True):
     if (type(id_cate) != list):
         id_cate = [id_cate]
     print("%s unique num: %s" % (id_cate, train[id_cate].nunique()))
     col_name = "_".join(list(id_cate))
     col_name = col_name + "_" + target + "_ctr"
-    bayes_feature = encode_vt(train, test, id_cate, target)
+    bayes_feature = encode_vt(train, test, id_cate, target, use_bayes_smooth)
     test[col_name] = bayes_feature
     skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=2018)
     for i, (train_idx, test_idx) in enumerate(skf.split(np.zeros(len(train)), train[target])):
         print(id_cate, target, i)
         X_train = train.iloc[train_idx]
         X_test = train.iloc[test_idx]
-        bayes_feature = encode_vt(X_train, X_test, id_cate, target)
+        bayes_feature = encode_vt(X_train, X_test, id_cate, target, use_bayes_smooth)
         train.ix[train.iloc[test_idx].index, col_name] = bayes_feature
     return train[[col_name]], test[[col_name]]
 
+def sigmoid(x):
+    return 1 / (1 + np.exp(-x))
+
+def inverse_sigmoid(x):
+    return -np.log(1/x - 1)
+
+def sigmoid_avg(xs):
+    newxs = []
+    for _x in xs:
+        newxs.append(inverse_sigmoid(_x))
+    x = np.mean(newxs,axis=0)
+    return sigmoid(x)
 
 def mkpath(path):
     if (not os.path.exists(path)):
@@ -565,6 +582,7 @@ def mkpath(path):
 
 
 if __name__ == '__main__':
+
     print(cosine(np.asarray([[1, 2, 3], [2, 5, 10], [2, 4, 6]]), np.asarray([1, 2, 3])))
     print(euclidean.__name__)
     print(cosine in MAX_DIS_FUNCTION)
