@@ -581,10 +581,11 @@ def rank_avg(ress, weightss, label_name, id_name):
         a.sort_values(by=label_name,inplace=True)
         a['rank'] = np.arange(a.shape[0]) / a.shape[0]
         a.sort_values(id_name,inplace=True)
-    c = a[[id_name]]
+    c = a.copy()
     c[label_name] = 0
     for _w, _a in zip(weightss,ress):
         c[label_name] = c[label_name].values + (_a['rank'].values * _w)
+    del c['rank']
     return c
 
 def mkpath(path):
