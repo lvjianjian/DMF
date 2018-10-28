@@ -576,6 +576,17 @@ def sigmoid_avg(xs):
     x = np.mean(newxs,axis=0)
     return sigmoid(x)
 
+def rank_avg(ress, weightss, label_name, id_name):
+    for a in ress:
+        a.sort_values(by=label_name,inplace=True)
+        a['rank'] = np.arange(a.shape[0]) / a.shape[0]
+        a.sort_values(id_name,inplace=True)
+    c = a[[id_name]]
+    c[label_name] = 0
+    for _w, _a in zip(weightss,ress):
+        c[label_name] = c[label_name].values + (_a['rank'].values * _w)
+    return c
+
 def mkpath(path):
     if (not os.path.exists(path)):
         os.mkdir(path)
