@@ -27,7 +27,7 @@ from contextlib import contextmanager
 from itertools import product
 from DMF.smooth import HyperParam
 import jieba
-
+from multiprocessing import Pool
 
 MAX_DIS_FUNCTION = []
 
@@ -587,10 +587,41 @@ def rank_avg(ress, weightss, label_name, id_name):
         c[label_name] = c[label_name].values + (_a['rank'].values * _w)
     return c
 
+
+
+def count_ratio(func, func2, click_label_func, dataPath):
+    """
+
+    :param func: specify_count_df_func
+    :param func2: count_df_func
+    :param click_label_func:
+    :param dataPath:
+    :return:
+    """
+    a1 = func(dataPath)
+    a2 = func2(dataPath)
+    a3 = click_label_func(dataPath)
+    res = a3[['_index']]
+    for _c in a1.columns.tolist():
+        res[_c + "_ratio"] = a1[_c] / a2[a2.columns[0]]
+    return res
+
 def mkpath(path):
     if (not os.path.exists(path)):
         os.mkdir(path)
 
+
+#并行 map更快
+def map_func(func, data):
+    agents = 8
+    chunksize = 16
+    with contextlib.closing(Pool(processes=agents)) as pool:
+        res = pool.map(func, data, chunksize)
+    return res
+
+def apply_func(func, data, n_jobs):
+    res = Parallel(n_jobs=n_jobs)(delayed(func)(x) for x in data)
+    return res
 
 if __name__ == '__main__':
 
