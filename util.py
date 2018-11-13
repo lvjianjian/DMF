@@ -546,7 +546,7 @@ def encode_vt(train_df, test_df, variable, target, use_bayes=True):
     return df
 
 
-def transform(id_cate, target, train, test, use_bayes_smooth=True):
+def transform(id_cate, target, train, test, use_bayes_smooth=True, bayes_n_split=5):
     if (type(id_cate) != list):
         id_cate = [id_cate]
     print("%s unique num: %s" % (id_cate, train[id_cate].nunique()))
@@ -554,7 +554,7 @@ def transform(id_cate, target, train, test, use_bayes_smooth=True):
     col_name = col_name + "_" + target + "_ctr"
     bayes_feature = encode_vt(train, test, id_cate, target, use_bayes_smooth)
     test[col_name] = bayes_feature
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=2018)
+    skf = StratifiedKFold(n_splits=bayes_n_split, shuffle=True, random_state=2018)
     for i, (train_idx, test_idx) in enumerate(skf.split(np.zeros(len(train)), train[target])):
         print(id_cate, target, i)
         X_train = train.iloc[train_idx]
@@ -581,10 +581,11 @@ def rank_avg(ress, weightss, label_name, id_name):
         a.sort_values(by=label_name,inplace=True)
         a['rank'] = np.arange(a.shape[0]) / a.shape[0]
         a.sort_values(id_name,inplace=True)
-    c = a[[id_name]]
+    c = a.copy()
     c[label_name] = 0
     for _w, _a in zip(weightss,ress):
         c[label_name] = c[label_name].values + (_a['rank'].values * _w)
+    del c['rank']
     return c
 
 
