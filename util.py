@@ -624,6 +624,57 @@ def apply_func(func, data, n_jobs):
     res = Parallel(n_jobs=n_jobs)(delayed(func)(x) for x in data)
     return res
 
+# lgb进行特征选择
+def lgb_important_features(dataPath, click_label_fun, NEED_VALID_FUN_set, feature_functions, lgb_params, num_boost_round = 300, topk = 30):
+    from DMF.train_predict import lgb_train
+    valid = False
+    feature_names = []
+    features = []
+    for _fun in feature_functions:
+        if (_fun in NEED_VALID_FUN_set):
+            temp2 = _fun(valid, dataPath)
+        else:
+            temp2 = _fun(dataPath)
+        features.append(temp2)
+    features2 = concat(features)
+    del temp2
+    del features
+    features = features2
+    del features2
+    feature_names += list(features.columns)
+    temp = click_label_fun(dataPath)
+    features[temp.columns.tolist()] = temp
+    del temp
+    gc.collect()
+    temp = features
+    del features
+    gc.collect()
+    downcast(temp)
+    if '_index' in feature_names:
+        feature_names.remove('_index')
+    print(feature_names)
+    print(len(feature_names))
+    print("start train")
+    df = temp
+    train = df[df.Tag != -1]
+    test = df[df.Tag == -1]
+    trainx = train[feature_names].values
+    testx = test[feature_names].values
+    trainy = train['Tag'].values
+    feature_importances = []
+    lgb_train(trainx, trainy, testx, lgb_params, False, num_boost_round=num_boost_round,
+                     early_stopping_rounds=0, feature_importances=feature_importances,
+                     feature_names=feature_names)
+    feature_importance_names = []
+
+    for _i, _f in enumerate(feature_importances):
+        if(_i < topk):
+            feature_importance_names.append(_f[0])
+        else:
+            break
+    return temp[feature_importance_names + ['_index']]
+
+
 if __name__ == '__main__':
 
     print(cosine(np.asarray([[1, 2, 3], [2, 5, 10], [2, 4, 6]]), np.asarray([1, 2, 3])))
