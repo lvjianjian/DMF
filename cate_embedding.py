@@ -320,7 +320,7 @@ class CateEmbedding(object):
                 self.cate_embeding_by_all_deep_walk(df, cate1, cate2, n_components, dataPath)
             cate1_df = decomposition_ipca(dataPath, _c1 + ".pickle", decomposition_to)
         else:
-            cate1_df, cate2_df = self.cate_embeding_by_all_deep_walk(df, cate1, cate2, n_components, dataPath)
+            cate1_df, cate2_df = self.cate_embeding_by_all_deep_walk(dataPath, df, cate1, cate2, n_components)
         c_set = set()
         for _c in self.MAIN_ID:
             c_set.add(_c)
