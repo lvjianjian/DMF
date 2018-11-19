@@ -300,7 +300,7 @@ class CateEmbedding(object):
         interaction = pd.merge(interaction, cate2_df, on=cate2, how="outer")
         return interaction[self.MAIN_ID + u_cols + p_cols]
 
-    def cate_embedding_by_all_deepwalk_cate1(self, df, dataPath, cate1, cate2, n_components,
+    def cate_embedding_by_all_deepwalk_cate1(self, dataPath, df, cate1, cate2, n_components,
                                              decomposition_to=-1):  # just use cate1 embedding
         """
 
@@ -340,7 +340,7 @@ class CateEmbedding(object):
         interaction = pd.merge(interaction, cate1_df, on=cate1, how="outer")
         return interaction[self.MAIN_ID + u_cols]
 
-    def cate_embedding_by_all_deepwalk_cate2(self, df, dataPath, cate1, cate2, n_components,
+    def cate_embedding_by_all_deepwalk_cate2(self, dataPath, df, cate1, cate2, n_components,
                                              decomposition_to=-1):  # just use cate2 embedding
         """
 
