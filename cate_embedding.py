@@ -18,7 +18,7 @@ import gc
 import numpy as np
 from sklearn.decomposition import IncrementalPCA, TruncatedSVD, LatentDirichletAllocation, NMF
 import scipy
-from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.feature_extraction.text import CountVectorizer,TfidfTransformer
 # from DMF.data import *
 import jieba
 
@@ -72,7 +72,7 @@ def decomposition_ipca(dataPath, origin_pickle_name, pca_length, decom_col_name=
         f = newdf
     return f
 
-def simple_countVectorizer(df, dataPath, cate1, cate2, min_df=2):
+def simple_countVectorizer(df, dataPath, cate1, cate2, min_df=2, to_tfidf=False):
     if not os.path.exists(os.path.join(dataPath, 'cache/')):
         os.mkdir(os.path.join(dataPath, 'cache/'))
     sentence_file = os.path.join(dataPath,
@@ -98,11 +98,14 @@ def simple_countVectorizer(df, dataPath, cate1, cate2, min_df=2):
                                           min_df=min_df).fit_transform(cate2_as_sentence)
         scipy.sparse.save_npz(sentence_file, cate2_as_matrix)
         np.savez(cate1s_file, cate1s=cate1s)
-        return cate1s, cate2_as_matrix
     else:
         cate2_as_matrix = scipy.sparse.load_npz(sentence_file)
         cate1s = np.load(cate1s_file)['cate1s']
-        return list(cate1s), cate2_as_matrix
+        cate1s = list(cate1s)
+    if(to_tfidf):
+        cate2_as_matrix = TfidfTransformer().fit_transform(cate2_as_matrix)
+    return cate1s, cate2_as_matrix
+
 
 def simple_splitword_countVectorizer(df, dataPath, cate1, cate2, min_df=2, split_mode=False):
     # 对 cate2 分词
@@ -380,22 +383,25 @@ class CateEmbedding(object):
         interaction = pd.merge(interaction, cate2_df, on=cate2, how="outer")
         return interaction[self.MAIN_ID + p_cols]
 
-    def _embedding(self, dataPath, df, cate1, cate2, method, method_name, n_components=16, min_df=2):
+    def _embedding(self, dataPath, df, cate1, cate2, method, method_name, n_components=16, min_df=2, to_tfidf=False):
+        tfidf_name = ""
+        if(to_tfidf):
+            tfidf_name = "_tfidf"
         embedding_query_file = os.path.join(dataPath,
-                                            'cache/%s_%s_nc_%d_mindf_%d_%s_embedding.feather' % (
-                                                cate1, cate2, n_components, min_df, method_name))
+                                            'cache/%s_%s_nc_%d_mindf_%d_%s_embedding%s.feather' % (
+                                                cate1, cate2, n_components, min_df, method_name, tfidf_name))
 
         if not os.path.exists(embedding_query_file):
             if not os.path.exists(os.path.join(dataPath, 'cache/')):
                 os.mkdir(os.path.join(dataPath, 'cache/'))
 
-            cate1s, cate2_as_matrix = simple_countVectorizer(df, dataPath, cate1, cate2, min_df=min_df)
+            cate1s, cate2_as_matrix = simple_countVectorizer(df, dataPath, cate1, cate2, min_df=min_df, to_tfidf=to_tfidf)
             topics_of_cate1 = method.fit_transform(cate2_as_matrix)
             del cate2_as_matrix;
             gc.collect()
 
             topics_of_cate1 = pd.DataFrame(topics_of_cate1,
-                                           columns=["%s_%s_%s_%s" % (cate1, cate2, i, method_name) for i in
+                                           columns=["%s_%s_%s_%s%s" % (cate1, cate2, i, method_name, tfidf_name) for i in
                                                     range(n_components)]).astype('float32')
 
             topics_of_cate1[cate1] = cate1s
@@ -410,7 +416,7 @@ class CateEmbedding(object):
             topics_of_cate1 = pd.read_feather(embedding_query_file)
             return topics_of_cate1
 
-    def lda_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, batch_size=520, n_jobs=20):
+    def lda_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, batch_size=520, n_jobs=20, to_tfidf=False):
         '''
         此部分是做cate1 cate2的相关embedding,这里只要共同show过的都算相关
         '''
@@ -421,10 +427,10 @@ class CateEmbedding(object):
                                         n_jobs=n_jobs
                                         )
 
-        return self._embedding(dataPath, df, cate1, cate2, lda, "lda", n_components=n_components, min_df=min_df)
+        return self._embedding(dataPath, df, cate1, cate2, lda, "lda", n_components=n_components, min_df=min_df,to_tfidf=to_tfidf)
 
     def nmf_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2,
-                      max_iter=1000, alpha=.1, l1_ratio=.5):
+                      max_iter=1000, alpha=.1, l1_ratio=.5, to_tfidf=False):
         nmf = NMF(n_components=n_components,
                   random_state=2018,
                   beta_loss='kullback-leibler',
@@ -433,11 +439,11 @@ class CateEmbedding(object):
                   alpha=alpha,
                   l1_ratio=l1_ratio)
 
-        return self._embedding(dataPath, df, cate1, cate2, nmf, "nmf", n_components=n_components, min_df=min_df)
+        return self._embedding(dataPath, df, cate1, cate2, nmf, "nmf", n_components=n_components, min_df=min_df, to_tfidf=to_tfidf)
 
-    def svd_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, tol=0., n_iter=5):
+    def svd_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, tol=0., n_iter=5, to_tfidf=False):
         svd = TruncatedSVD(n_components, random_state=2018, tol=tol, n_iter=n_iter)
-        return self._embedding(dataPath, df, cate1, cate2, svd, "svd", n_components=n_components, min_df=min_df)
+        return self._embedding(dataPath, df, cate1, cate2, svd, "svd", n_components=n_components, min_df=min_df, to_tfidf=to_tfidf)
 
     def split_word_lda_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, batch_size=520, n_jobs=20, split_mode=False):
         '''
