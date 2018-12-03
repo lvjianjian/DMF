@@ -401,7 +401,7 @@ def kfold_train(kfold, model_type, trainx, trainy, testx, params, use_valid=True
                              num_boost_round, early_stopping_rounds, random_state, predict_prob,
                              feature_importances, group, model_save_file, feature_names, isFromFile,model,cate_threshold)
         preds.append(pred)
-    pred = np.mean(preds,axis=0)
+    pred = np.mean(preds, axis=0)
 
     if(use_all_data):
         _pred = general_train(model_type, trainx, trainy, testx,params, use_valid, valid_ratio, validx, validy,
@@ -411,25 +411,50 @@ def kfold_train(kfold, model_type, trainx, trainy, testx, params, use_valid=True
     return pred
 
 
+# 半监督 train
+def self_train(model_type, trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
+               validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
+               predict_prob=True, feature_importances=None, group=None, model_save_file=None,
+               feature_names="auto", isFromFile=False, model=None, cate_threshold=10, use_all_data=False, all_data_model_weight=0.2,
+                min_prob=0.01,max_prob=0.99, max_iteration=3, kfold=1):
 
-def lgb_self_train(params, trainx, trainy, testx,
-                   use_valid=True, valid_ratio=0.2, validx=None,
-                   validy=None, num_boost_round=500, early_stopping_rounds=5,
-                   min_prob=0.95, max_iteration=3):
-    """
-    自训练，将test中认为可靠的加入训练集再训练并预测，暂时只针对2分类
-    :param params:
-    :param trainx:
-    :param trainy:
-    :param testx:
-    :param use_valid:
-    :param valid_ratio:
-    :param validx:
-    :param validy:
-    :param num_boost_round:
-    :param early_stopping_rounds:
-    :param min_prob:
-    :param max_iteration:
-    :return:
-    """
-    pass
+    testx_idx = np.arange(testx.shape[0])
+    adds = set()
+    for _i in range(max_iteration):
+        print("self train iteration:", _i)
+        if(kfold > 1):
+            print('use kfold train')
+            pred = kfold_train(kfold, model_type,trainx,trainy,testx,params,use_valid,valid_ratio,
+                               validx,validy,num_boost_round,early_stopping_rounds,random_state,
+                               True,feature_importances,group,None,feature_names,isFromFile,model,cate_threshold,use_all_data,all_data_model_weight)
+        else:
+            print('use general train')
+            pred = general_train(model_type,trainx,trainy,testx,params,use_valid,valid_ratio,
+                                 validx,validy,num_boost_round,early_stopping_rounds,random_state,
+                                 True, feature_importances, group,None,feature_names,isFromFile,model,cate_threshold)
+
+        add_temp1 = set(testx_idx[pred <= min_prob])
+        add_temp2 = set(testx_idx[pred >= max_prob])
+        add_temp = add_temp1.union(add_temp2)
+        temp = list(add_temp - adds)
+        adds = adds.union(add_temp)
+        if(len(temp) > 0):
+            print("add ", len(temp))
+            idx = testx_idx[temp]
+            trainx = np.concatenate([trainx, testx[idx]])
+            trainy = np.concatenate([trainy, np.round(pred[idx]).astype(int)])
+        else:
+            print("no sample can be added")
+            break
+    print('final train')
+    if(kfold > 1):
+        print('use kfold train')
+        pred = kfold_train(kfold, model_type,trainx,trainy,testx,params,use_valid,valid_ratio,
+                           validx,validy,num_boost_round,early_stopping_rounds,random_state,
+                           predict_prob,feature_importances,group,model_save_file,feature_names,isFromFile,model,cate_threshold,use_all_data,all_data_model_weight)
+    else:
+        print('use general train')
+        pred = general_train(model_type,trainx,trainy,testx,params,use_valid,valid_ratio,
+                             validx,validy,num_boost_round,early_stopping_rounds,random_state,
+                             predict_prob, feature_importances, group,model_save_file,feature_names,isFromFile,model,cate_threshold)
+    return pred
