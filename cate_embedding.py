@@ -13,7 +13,7 @@
 
 import os
 import pandas as pd
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder,MinMaxScaler
 import gc
 import numpy as np
 from sklearn.decomposition import IncrementalPCA, TruncatedSVD, LatentDirichletAllocation, NMF
@@ -21,6 +21,9 @@ import scipy
 from sklearn.feature_extraction.text import CountVectorizer,TfidfTransformer
 # from DMF.data import *
 import jieba
+from keras import Model,Sequential,Input
+from keras.layers import Dense
+
 
 def split_word_list(word_list, split_mode=False):
     seg_list = []
@@ -444,6 +447,77 @@ class CateEmbedding(object):
     def svd_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, tol=0., n_iter=5, to_tfidf=False):
         svd = TruncatedSVD(n_components, random_state=2018, tol=tol, n_iter=n_iter)
         return self._embedding(dataPath, df, cate1, cate2, svd, "svd", n_components=n_components, min_df=min_df, to_tfidf=to_tfidf)
+
+
+        # nn自编码输出编码层
+    def _autoEncoder(self, data, output_dim=15, random_state=2018):
+        # 设置种子
+        np.random.seed(random_state)
+        '''
+        :param data: 数据
+        :param output_dim: 压缩到多少维
+        :return: 返回encoder层的结果
+        '''
+
+        # 归一化
+        min_max_scaler = MinMaxScaler()
+        data = min_max_scaler.fit_transform(data.A)
+        input_dim = data.shape[1]
+
+        # 占位
+        input_data = Input(shape=(input_dim,))
+        autoencoder = Sequential()
+        autoencoder.add(Dense(output_dim,input_shape=(input_dim,),activation='relu'))
+        autoencoder.add(Dense(input_dim,activation='sigmoid'))
+        # 编码层和解码层(有dense层，cnn层)
+        # "encoded" is the encoded representation of the input
+        # encoded = Dense(output_dim, activation='relu')(input_data)
+        # # "decoded" is the lossy reconstruction of the input
+        # decoded = Dense(input_dim, activation='sigmoid')(encoded)
+        #
+        # # this model maps an input to its reconstruction
+        # autoencoder = Model(input=input_data, output=decoded)
+
+        # encoder model
+        encoder_layer = autoencoder.layers[0]
+        encoder = Model(input_data, encoder_layer(input_data))
+        print(encoder.summary())
+
+        # 编译，训练
+        autoencoder.compile(optimizer='adam', loss='binary_crossentropy')
+        autoencoder.fit(data, data,
+                        nb_epoch=50,
+                        batch_size=128,
+                        shuffle=True)
+        # 输出编码层结果
+        encoder = encoder.predict(data)
+        return encoder
+
+    def cate_embedding_by_auto_encoder(self, dataPath, df, cate1, cate2, n_components=16, min_df=2):
+        embedding_query_file = os.path.join(dataPath,
+                                            'cache/%s_%s_nc_%d_mindf_%d_embedding_by_auto_encoder.feather' % (cate1, cate2, n_components, min_df ))
+
+        if not os.path.exists(embedding_query_file):
+            if not os.path.exists(os.path.join(dataPath, 'cache/')):
+                os.mkdir(os.path.join(dataPath, 'cache/'))
+
+            cate1s, cate2_as_matrix = simple_countVectorizer(df, dataPath, cate1, cate2, min_df=min_df, to_tfidf=False)
+            topics_of_cate1 = self._autoEncoder(cate2_as_matrix, n_components)
+            topics_of_cate1 = pd.DataFrame(topics_of_cate1,
+                                           columns=["%s_%s_%s_%s" % (cate1, cate2, i, 'auto_encoder') for i in
+                                                    range(n_components)]).astype('float32')
+
+            topics_of_cate1[cate1] = cate1s
+            del cate1s;
+            gc.collect()
+            # print(topics_of_cate1.head(3))
+            del df;
+            gc.collect()
+            topics_of_cate1.to_feather(embedding_query_file)
+            return topics_of_cate1
+        else:
+            topics_of_cate1 = pd.read_feather(embedding_query_file)
+            return topics_of_cate1
 
     def split_word_lda_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, batch_size=520, n_jobs=20, split_mode=False):
         '''
