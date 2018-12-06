@@ -16,7 +16,7 @@ import pandas as pd
 import os
 import lightgbm as lgb
 import xgboost as xgb
-from sklearn.model_selection import KFold, StratifiedKFold,train_test_split
+from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
 from DMF.util import detect_cates_for_narrayx, transform_float_to_int_for_narrayx
@@ -62,24 +62,26 @@ def _get_label_size(trainy):
         label_size = 1
     return label_size
 
+
 def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
               validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
-              predict_prob=True, feature_importances=None, group=None,model_save_file=None,
+              predict_prob=True, feature_importances=None, group=None, model_save_file=None,
               feature_names="auto", isFromFile=False):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
     gbm = lgb_train_model(trainx, trainy, params, use_valid, valid_ratio, validx, validy,
-                          num_boost_round, early_stopping_rounds, random_state, feature_names, group,isFromFile=isFromFile)
-    if(model_save_file is not None):
+                          num_boost_round, early_stopping_rounds, random_state, feature_names, group,
+                          isFromFile=isFromFile)
+    if (model_save_file is not None):
         gbm.save_model(model_save_file, num_iteration=gbm.best_iteration)
-    if(type(feature_importances) == list):
-        names, importances = zip(*(sorted(zip( gbm.feature_name(), gbm.feature_importance()), key=lambda x: -x[1])))
-        feature_importances += list((zip(names,importances)))
+    if (type(feature_importances) == list):
+        names, importances = zip(*(sorted(zip(gbm.feature_name(), gbm.feature_importance()), key=lambda x: -x[1])))
+        feature_importances += list((zip(names, importances)))
     return predict(gbm, "lgb", testx, predict_proba=predict_prob)
 
 
 def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, validx=None,
                     validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
 
-                    feature_names=None,group=None,isFromFile=False):
+                    feature_names=None, group=None, isFromFile=False):
     """
     lgb train 返回train的model
     :param trainx:
@@ -95,20 +97,19 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
     :return:
     """
 
-
-    if(feature_names is None):
+    if (feature_names is None):
         feature_names = "auto"
-    if(isFromFile):
+    if (isFromFile):
         print("do not support isFromFile Now")
         exit(1)
-        if(type(trainx) is pd.DataFrame):
+        if (type(trainx) is pd.DataFrame):
             feature_names = list(trainx.columns)
-        if(type(feature_names) is not list and type(feature_names) is not pd.Index and feature_names == "auto"):
+        if (type(feature_names) is not list and type(feature_names) is not pd.Index and feature_names == "auto"):
             print("please set feature names when isFromFile == True")
             exit(1)
         train_np = trainx.values.reshape(-1).astype(np.float32)
         num_sample, num_feature = trainx.shape
-        del trainx # cannot del global
+        del trainx  # cannot del global
         train_np.tofile('./X_train_cache.bin')
         del train_np
 
@@ -118,12 +119,12 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
                                                               trainy,
                                                               test_size=valid_ratio,
                                                               random_state=random_state)
-        if(isFromFile):
+        if (isFromFile):
             lgb_train_ = lgb.Dataset('./X_train_cache.bin',
-                                    label=trainy,
-                                    feature_name = feature_names,
-                                    isFromFile = True,
-                                    shape = (num_sample, num_feature))
+                                     label=trainy,
+                                     feature_name=feature_names,
+                                     isFromFile=True,
+                                     shape=(num_sample, num_feature))
         else:
             lgb_train_ = lgb.Dataset(trainx, trainy, feature_name=feature_names)
         del trainx
@@ -140,14 +141,14 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
                         valid_sets=lgb_eval,
                         early_stopping_rounds=early_stopping_rounds)
     else:
-        if(isFromFile):
+        if (isFromFile):
             lgb_train_ = lgb.Dataset('./X_train_cache.bin',
                                      label=trainy,
-                                     feature_name = feature_names,
-                                     isFromFile = True,
-                                     shape = (num_sample, num_feature))
+                                     feature_name=feature_names,
+                                     isFromFile=True,
+                                     shape=(num_sample, num_feature))
         else:
-            lgb_train_ = lgb.Dataset(trainx, trainy,feature_name=feature_names,group=group)
+            lgb_train_ = lgb.Dataset(trainx, trainy, feature_name=feature_names, group=group)
         del trainx
         del trainy
         gc.collect()
@@ -156,6 +157,7 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
                         lgb_train_,
                         num_boost_round=num_boost_round)
     return gbm
+
 
 def lgb_predict(trainx, trainy, testx,
                 params, use_valid=True, valid_ratio=0.2, validx=None,
@@ -173,18 +175,19 @@ def lgb_predict(trainx, trainy, testx,
         return lgb_train(trainx, trainy, testx, params.copy(), use_valid, valid_ratio,
                          validx, validy, num_boost_round, early_stopping_rounds, random_state, predict_prob)
 
+
 def xgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
               validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
-              predict_prob=True, feature_importances=None,model_save_file=None,
+              predict_prob=True, feature_importances=None, model_save_file=None,
               feature_names=None):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
     gbm = xgb_train_model(trainx, trainy, params, use_valid, valid_ratio, validx, validy,
                           num_boost_round, early_stopping_rounds, random_state, feature_names)
-    if(model_save_file is not None):
+    if (model_save_file is not None):
         gbm.save_model(model_save_file)
-    if(type(feature_importances) == list):
+    if (type(feature_importances) == list):
         names, importances = zip(*(sorted(gbm.get_fscore().items(), key=lambda x: -x[1])))
         feature_importances += list((zip(names, importances)))
-    return predict(gbm, "xgb", testx, predict_proba=predict_prob,feature_names=feature_names)
+    return predict(gbm, "xgb", testx, predict_proba=predict_prob, feature_names=feature_names)
 
 
 def xgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, validx=None,
@@ -235,6 +238,7 @@ def xgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
                         xgb_train_,
                         num_boost_round=num_boost_round)
     return gbm
+
 
 def xgb_predict(trainx, trainy, testx,
                 params, use_valid=True, valid_ratio=0.2, validx=None,
@@ -357,7 +361,7 @@ def predict(trained_model, model_name, testx, predict_proba=True, feature_names=
         testDM = xgb.DMatrix(testx, feature_names=feature_names)
         return trained_model.predict(testDM)
     else:
-        if(model_name == "catboost"):
+        if (model_name == "catboost"):
             testx = transform_float_to_int_for_narrayx(testx, trained_model.cates)
 
         if (predict_proba):
@@ -365,25 +369,92 @@ def predict(trained_model, model_name, testx, predict_proba=True, feature_names=
         else:
             return trained_model.predict(testx)
 
+# 通用train和predict方法
+def general_train(model_type, trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
+                  validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
+                  predict_prob=True, feature_importances=None, group=None, model_save_file=None,
+                  feature_names="auto", isFromFile=False, model=None, cate_threshold=10):
+    if (model_type == 'lgb'):
+        return lgb_train(trainx, trainy, testx, params, use_valid, valid_ratio, validx, validy,
+                         num_boost_round, early_stopping_rounds, random_state, predict_prob,
+                         feature_importances, group, model_save_file, feature_names, isFromFile)
+    elif (model_type == 'xgb'):
+        return xgb_train(trainx, trainy, testx, params, use_valid, valid_ratio, validx, validy,
+                         num_boost_round, early_stopping_rounds, random_state, predict_prob,
+                         feature_importances, model_save_file, feature_names)
+    elif (model_type == 'catboost'):
+        return catboost_train(model, trainx, trainy, testx, cate_threshold, predict_prob)
+    else:  # sklearn
+        return sklearn_train(model, trainx, trainy, testx, predict_prob)
 
-def lgb_self_train(params, trainx, trainy, testx,
-                   use_valid=True, valid_ratio=0.2, validx=None,
-                   validy=None, num_boost_round=500, early_stopping_rounds=5,
-                   min_prob = 0.95, max_iteration=3):
-    """
-    自训练，将test中认为可靠的加入训练集再训练并预测，暂时只针对2分类
-    :param params:
-    :param trainx:
-    :param trainy:
-    :param testx:
-    :param use_valid:
-    :param valid_ratio:
-    :param validx:
-    :param validy:
-    :param num_boost_round:
-    :param early_stopping_rounds:
-    :param min_prob:
-    :param max_iteration:
-    :return:
-    """
-    pass
+# k折train
+def kfold_train(kfold, model_type, trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
+                validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
+                predict_prob=True, feature_importances=None, group=None, model_save_file=None,
+                feature_names="auto", isFromFile=False, model=None, cate_threshold=10, use_all_data=False, all_data_model_weight=0.2):
+    preds = []
+    kf = StratifiedKFold(n_splits=kfold, shuffle=True, random_state=random_state)
+    for _train, _test in kf.split(trainy, trainy):
+        sub_trainx = trainx[_train]
+        sub_trainy = trainy[_train]
+        pred = general_train(model_type, sub_trainx, sub_trainy, testx,params, use_valid, valid_ratio, validx, validy,
+                             num_boost_round, early_stopping_rounds, random_state, predict_prob,
+                             feature_importances, group, model_save_file, feature_names, isFromFile,model,cate_threshold)
+        preds.append(pred)
+    pred = np.mean(preds, axis=0)
+
+    if(use_all_data):
+        _pred = general_train(model_type, trainx, trainy, testx,params, use_valid, valid_ratio, validx, validy,
+                             num_boost_round, early_stopping_rounds, random_state, predict_prob,
+                             feature_importances, group, model_save_file, feature_names, isFromFile,model,cate_threshold)
+        pred = (1-all_data_model_weight) * pred + all_data_model_weight * _pred
+    return pred
+
+
+# 半监督 train
+def self_train(model_type, trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
+               validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
+               predict_prob=True, feature_importances=None, group=None, model_save_file=None,
+               feature_names="auto", isFromFile=False, model=None, cate_threshold=10, use_all_data=False, all_data_model_weight=0.2,
+                min_prob=0.01,max_prob=0.99, max_iteration=3, kfold=1):
+
+    testx_idx = np.arange(testx.shape[0])
+    adds = set()
+    for _i in range(max_iteration):
+        print("self train iteration:", _i)
+        if(kfold > 1):
+            print('use kfold train')
+            pred = kfold_train(kfold, model_type,trainx,trainy,testx,params,use_valid,valid_ratio,
+                               validx,validy,num_boost_round,early_stopping_rounds,random_state,
+                               True,feature_importances,group,None,feature_names,isFromFile,model,cate_threshold,use_all_data,all_data_model_weight)
+        else:
+            print('use general train')
+            pred = general_train(model_type,trainx,trainy,testx,params,use_valid,valid_ratio,
+                                 validx,validy,num_boost_round,early_stopping_rounds,random_state,
+                                 True, feature_importances, group,None,feature_names,isFromFile,model,cate_threshold)
+
+        add_temp1 = set(testx_idx[pred <= min_prob])
+        add_temp2 = set(testx_idx[pred >= max_prob])
+        add_temp = add_temp1.union(add_temp2)
+        temp = list(add_temp - adds)
+        adds = adds.union(add_temp)
+        if(len(temp) > 0):
+            print("add ", len(temp))
+            idx = testx_idx[temp]
+            trainx = np.concatenate([trainx, testx[idx]])
+            trainy = np.concatenate([trainy, np.round(pred[idx]).astype(int)])
+        else:
+            print("no sample can be added")
+            break
+    print('final train')
+    if(kfold > 1):
+        print('use kfold train')
+        pred = kfold_train(kfold, model_type,trainx,trainy,testx,params,use_valid,valid_ratio,
+                           validx,validy,num_boost_round,early_stopping_rounds,random_state,
+                           predict_prob,feature_importances,group,model_save_file,feature_names,isFromFile,model,cate_threshold,use_all_data,all_data_model_weight)
+    else:
+        print('use general train')
+        pred = general_train(model_type,trainx,trainy,testx,params,use_valid,valid_ratio,
+                             validx,validy,num_boost_round,early_stopping_rounds,random_state,
+                             predict_prob, feature_importances, group,model_save_file,feature_names,isFromFile,model,cate_threshold)
+    return pred

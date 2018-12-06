@@ -27,7 +27,7 @@ from contextlib import contextmanager
 from itertools import product
 from DMF.smooth import HyperParam
 import jieba
-
+from multiprocessing import Pool
 
 MAX_DIS_FUNCTION = []
 
@@ -546,7 +546,7 @@ def encode_vt(train_df, test_df, variable, target, use_bayes=True):
     return df
 
 
-def transform(id_cate, target, train, test, use_bayes_smooth=True):
+def transform(id_cate, target, train, test, use_bayes_smooth=True, bayes_n_split=5):
     if (type(id_cate) != list):
         id_cate = [id_cate]
     print("%s unique num: %s" % (id_cate, train[id_cate].nunique()))
@@ -554,7 +554,7 @@ def transform(id_cate, target, train, test, use_bayes_smooth=True):
     col_name = col_name + "_" + target + "_ctr"
     bayes_feature = encode_vt(train, test, id_cate, target, use_bayes_smooth)
     test[col_name] = bayes_feature
-    skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=2018)
+    skf = StratifiedKFold(n_splits=bayes_n_split, shuffle=True, random_state=2018)
     for i, (train_idx, test_idx) in enumerate(skf.split(np.zeros(len(train)), train[target])):
         print(id_cate, target, i)
         X_train = train.iloc[train_idx]
@@ -588,9 +588,92 @@ def rank_avg(ress, weightss, label_name, id_name):
     del c['rank']
     return c
 
+
+
+def count_ratio(func, func2, click_label_func, dataPath):
+    """
+
+    :param func: specify_count_df_func
+    :param func2: count_df_func
+    :param click_label_func:
+    :param dataPath:
+    :return:
+    """
+    a1 = func(dataPath)
+    a2 = func2(dataPath)
+    a3 = click_label_func(dataPath)
+    res = a3[['_index']]
+    for _c in a1.columns.tolist():
+        res[_c + "_ratio"] = a1[_c] / a2[a2.columns[0]]
+    return res
+
 def mkpath(path):
     if (not os.path.exists(path)):
         os.mkdir(path)
+
+
+#并行 map更快
+def map_func(func, data):
+    agents = 8
+    chunksize = 16
+    with contextlib.closing(Pool(processes=agents)) as pool:
+        res = pool.map(func, data, chunksize)
+    return res
+
+def apply_func(func, data, n_jobs):
+    res = Parallel(n_jobs=n_jobs)(delayed(func)(x) for x in data)
+    return res
+
+# lgb进行特征选择
+def lgb_important_features(dataPath, click_label_fun, NEED_VALID_FUN_set, feature_functions, lgb_params, num_boost_round = 300, topk = 30):
+    from DMF.train_predict import lgb_train
+    valid = False
+    feature_names = []
+    features = []
+    for _fun in feature_functions:
+        if (_fun in NEED_VALID_FUN_set):
+            temp2 = _fun(valid, dataPath)
+        else:
+            temp2 = _fun(dataPath)
+        features.append(temp2)
+    features2 = concat(features)
+    del temp2
+    del features
+    features = features2
+    del features2
+    feature_names += list(features.columns)
+    temp = click_label_fun(dataPath)
+    features[temp.columns.tolist()] = temp
+    del temp
+    gc.collect()
+    temp = features
+    del features
+    gc.collect()
+    downcast(temp)
+    if '_index' in feature_names:
+        feature_names.remove('_index')
+    print(feature_names)
+    print(len(feature_names))
+    print("start train")
+    df = temp
+    train = df[df.Tag != -1]
+    test = df[df.Tag == -1]
+    trainx = train[feature_names].values
+    testx = test[feature_names].values
+    trainy = train['Tag'].values
+    feature_importances = []
+    lgb_train(trainx, trainy, testx, lgb_params, False, num_boost_round=num_boost_round,
+                     early_stopping_rounds=0, feature_importances=feature_importances,
+                     feature_names=feature_names)
+    feature_importance_names = []
+
+    for _i, _f in enumerate(feature_importances):
+        if(_i < topk):
+            feature_importance_names.append(_f[0])
+        else:
+            break
+    return temp[feature_importance_names + ['_index']]
+
 
 if __name__ == '__main__':
 
