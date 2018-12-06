@@ -592,7 +592,6 @@ def mkpath(path):
     if (not os.path.exists(path)):
         os.mkdir(path)
 
-
 if __name__ == '__main__':
 
     print(cosine(np.asarray([[1, 2, 3], [2, 5, 10], [2, 4, 6]]), np.asarray([1, 2, 3])))

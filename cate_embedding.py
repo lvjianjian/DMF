@@ -25,6 +25,7 @@ import jieba
 def split_word_list(word_list, split_mode=False):
     seg_list = []
     for word in word_list:
+        word = str(word)
         seg_list.extend(jieba.cut(word, cut_all=split_mode))       
     return seg_list
 
@@ -438,6 +439,8 @@ class CateEmbedding(object):
     def svd_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, tol=0., n_iter=5):
         svd = TruncatedSVD(n_components, random_state=2018, tol=tol, n_iter=n_iter)
         return self._embedding(dataPath, df, cate1, cate2, svd, "svd", n_components=n_components, min_df=min_df)
+
+
 
     def split_word_lda_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, batch_size=520, n_jobs=20, split_mode=False):
         '''
