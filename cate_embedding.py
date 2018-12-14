@@ -23,6 +23,7 @@ from sklearn.feature_extraction.text import CountVectorizer,TfidfTransformer
 import jieba
 from keras import Model,Sequential,Input
 from keras.layers import Dense
+from DMF.util import mkpath
 
 
 def split_word_list(word_list, split_mode=False):
@@ -199,6 +200,8 @@ class CateEmbedding(object):
         _c = "{}_{}_{}_all_deepwalk".format(cate1, cate2, n_component)
         _c1 = "{}_{}".format(_c, cate1)
         _c2 = "{}_{}".format(_c, cate2)
+        dataPath = os.path.join(dataPath, 'cache')
+        mkpath(dataPath)
         cate1_path = os.path.join(dataPath, _c1 + ".pickle")
         cate2_path = os.path.join(dataPath, _c2 + ".pickle")
         if (os.path.exists(cate1_path) and os.path.exists(cate2_path)):
