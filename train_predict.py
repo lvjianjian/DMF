@@ -416,7 +416,7 @@ def self_train(model_type, trainx, trainy, testx, params, use_valid=True, valid_
                validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
                predict_prob=True, feature_importances=None, group=None, model_save_file=None,
                feature_names="auto", isFromFile=False, model=None, cate_threshold=10, use_all_data=False, all_data_model_weight=0.2,
-                min_prob=0.01,max_prob=0.99, max_iteration=3, kfold=1):
+                min_prob=0.01,max_prob=0.99, max_iteration=1, kfold=1, rules=None):
 
     testx_idx = np.arange(testx.shape[0])
     adds = set()
@@ -432,6 +432,11 @@ def self_train(model_type, trainx, trainy, testx, params, use_valid=True, valid_
             pred = general_train(model_type,trainx,trainy,testx,params,use_valid,valid_ratio,
                                  validx,validy,num_boost_round,early_stopping_rounds,random_state,
                                  True, feature_importances, group,None,feature_names,isFromFile,model,cate_threshold)
+
+        if(rules is not None):
+            for _id, _v in rules.items():
+                pred[_id] = _v
+            rules = None
 
         add_temp1 = set(testx_idx[pred <= min_prob])
         add_temp2 = set(testx_idx[pred >= max_prob])
