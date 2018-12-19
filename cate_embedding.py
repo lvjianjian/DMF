@@ -432,7 +432,7 @@ class CateEmbedding(object):
         此部分是做cate1 cate2的相关embedding,这里只要共同show过的都算相关
         '''
         lda = LatentDirichletAllocation(n_components=n_components,
-                                        learning_method='online',
+                                        learning_method='batch',
                                         batch_size=batch_size,
                                         random_state=2018,
                                         n_jobs=n_jobs
@@ -534,7 +534,7 @@ class CateEmbedding(object):
         此部分是做cate1 cate2的相关embedding,这里只要共同show过的都算相关
         '''
         lda = LatentDirichletAllocation(n_components=n_components,
-                                        learning_method='online',
+                                        learning_method='batch',
                                         batch_size=batch_size,
                                         random_state=2018,
                                         n_jobs=n_jobs

@@ -116,7 +116,7 @@ def dump_feature_remove_main_id(f):  # 定义装饰器函数，功能是传进�
             r = f(*args, **kw)
             r.sort_values(by=SORT_ID, inplace=True)
             # remove main id
-            if (f.__name__ != 'click_label'):
+            if (not f.__name__.startswith('click_label')):
                 for _c in MAIN_ID:
                     if (_c in r.columns):
                         del r[_c]
