@@ -391,10 +391,12 @@ def general_train(model_type, trainx, trainy, testx, params, use_valid=True, val
 def kfold_train(kfold, model_type, trainx, trainy, testx, params=None, use_valid=True, valid_ratio=0.2, validx=None,
                 validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
                 predict_prob=True, feature_importances=None, group=None, model_save_file=None,
-                feature_names="auto", isFromFile=False, model=None, cate_threshold=10, use_all_data=False, all_data_model_weight=0.2):
+                feature_names="auto", isFromFile=False, model=None, cate_threshold=10, use_all_data=False, all_data_model_weight=0.2,kfold_split_values=None):
+    if(kfold_split_values is None):
+        kfold_split_values = trainy
     preds = []
     kf = StratifiedKFold(n_splits=kfold, shuffle=True, random_state=random_state)
-    for _train, _test in kf.split(trainy, trainy):
+    for _train, _test in kf.split(kfold_split_values, kfold_split_values):
         sub_trainx = trainx[_train]
         sub_trainy = trainy[_train]
         pred = general_train(model_type, sub_trainx, sub_trainy, testx,params, use_valid, valid_ratio, validx, validy,
