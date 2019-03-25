@@ -96,20 +96,20 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
     :param random_state:
     :return:
     """
-
+    deltrainx = False
     if (feature_names is None):
         feature_names = "auto"
     if (isFromFile):
-        print("do not support isFromFile Now")
-        exit(1)
         if (type(trainx) is pd.DataFrame):
             feature_names = list(trainx.columns)
         if (type(feature_names) is not list and type(feature_names) is not pd.Index and feature_names == "auto"):
             print("please set feature names when isFromFile == True")
             exit(1)
-        train_np = trainx.values.reshape(-1).astype(np.float32)
         num_sample, num_feature = trainx.shape
-        del trainx  # cannot del global
+        del trainx
+        deltrainx = True
+        # if(not os.path.exists('./X_train_cache.bin')):
+        train_np = trainx.values.reshape(-1).astype(np.float32)
         train_np.tofile('./X_train_cache.bin')
         del train_np
 
@@ -127,6 +127,7 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
                                      shape=(num_sample, num_feature))
         else:
             lgb_train_ = lgb.Dataset(trainx, trainy, feature_name=feature_names)
+
         del trainx
         del trainy
         gc.collect()
@@ -149,7 +150,8 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
                                      shape=(num_sample, num_feature))
         else:
             lgb_train_ = lgb.Dataset(trainx, trainy, feature_name=feature_names, group=group)
-        del trainx
+        if(not deltrainx):
+            del trainx
         del trainy
         gc.collect()
         params_copy = params.copy()

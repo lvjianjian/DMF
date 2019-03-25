@@ -90,7 +90,7 @@ def dump_feature(f):  # 定义装饰器函数，功能是传进来的函数进�
     return fn
 
 
-MAIN_ID = ["query", "title", "tag"]
+MAIN_ID = ["uid", "pid"]
 SORT_ID = ['_index']
 
 
@@ -545,7 +545,7 @@ def encode_vt(train_df, test_df, variable, target, use_bayes=True):
     df = np.asarray(df, dtype=np.float32)
     return df
 
-
+@performance
 def transform(id_cate, target, train, test, use_bayes_smooth=True, bayes_n_split=5):
     if (type(id_cate) != list):
         id_cate = [id_cate]
