@@ -16,7 +16,7 @@ import torch
 from torch.autograd import Variable
 
 
-class FM(nn.Module):
+class FM(nn.Module):# have bug
     def __init__(self, args):
         self.model_name = "Factorization Machine"
         super(FM, self).__init__()
@@ -37,8 +37,32 @@ class FM(nn.Module):
         z = eQ.sum(dim=1, keepdim=True)
         z2 = z.mul(z)
         logitFM2 = z2.sum(dim=2, keepdim=True)
-        logitFM = (logitFM1 - logitFM2) * 0.5
+        logitFM = (logitFM2 - logitFM1) * 0.5
         logit = (logitL + logitFM).squeeze(dim=-1).squeeze(dim=-1)
         # logit += self.B
         # logit = self.sigmoid(logit)
         return logit
+
+
+class FM_model(nn.Module):
+    def __init__(self, n, k):
+        super(FM_model, self).__init__()
+        self.n = n # len(items) + len(users)
+        self.k = k
+        self.linear = nn.Linear(self.n, 1, bias=True)
+        self.v = nn.Parameter(torch.randn(self.k, self.n))
+
+    def fm_layer(self, x):
+        # x 属于 R^{batch*n}
+        linear_part = self.linear(x)
+        # 矩阵相乘 (batch*p) * (p*k)
+        inter_part1 = torch.mm(x, self.v.t())  # out_size = (batch, k)
+        # 矩阵相乘 (batch*p)^2 * (p*k)^2
+        inter_part2 = torch.mm(torch.pow(x, 2), torch.pow(self.v, 2).t()) # out_size = (batch, k)
+        output = linear_part + 0.5 * torch.sum(torch.pow(inter_part1, 2) - inter_part2)
+        # 这里torch求和一定要用sum
+        return output  # out_size = (batch, 1)
+
+    def forward(self, x):
+        output = self.fm_layer(x)
+        return output

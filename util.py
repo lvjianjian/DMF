@@ -371,7 +371,7 @@ def transform_float_to_int_for_narrayx(x, cates):
         x[:, _i] = x[:, _i].astype(int)
     return x
 
-
+@performance
 def downcast(df):
     """
     降位
@@ -673,6 +673,62 @@ def lgb_important_features(dataPath, click_label_fun, NEED_VALID_FUN_set, featur
         else:
             break
     return temp[feature_importance_names + ['_index']]
+
+@performance
+def reduce_mem_usage(df, verbose=True):
+    numerics = ['int8', 'int16', 'int32', 'int64', 'float16', 'float32', 'float64']
+    start_mem = df.memory_usage().sum() / 1024**2    
+    for col in df.columns:
+        col_type = df[col].dtype
+        if col_type in numerics:
+            c_min = df[col].min()
+            c_max = df[col].max()
+            if str(col_type)[:3] == 'int':
+                if c_min > np.iinfo(np.int8).min and c_max < np.iinfo(np.int8).max:
+                    df[col] = df[col].astype(np.int8)
+                elif c_min > np.iinfo(np.int16).min and c_max < np.iinfo(np.int16).max:
+                    df[col] = df[col].astype(np.int16)
+                elif c_min > np.iinfo(np.int32).min and c_max < np.iinfo(np.int32).max:
+                    df[col] = df[col].astype(np.int32)
+                elif c_min > np.iinfo(np.int64).min and c_max < np.iinfo(np.int64).max:
+                    df[col] = df[col].astype(np.int64)  
+            else:
+                if c_min > np.finfo(np.float16).min and c_max < np.finfo(np.float16).max:
+                    df[col] = df[col].astype(np.float16)
+                elif c_min > np.finfo(np.float32).min and c_max < np.finfo(np.float32).max:
+                    df[col] = df[col].astype(np.float32)
+                else:
+                    df[col] = df[col].astype(np.float64)    
+    end_mem = df.memory_usage().sum() / 1024**2
+    if verbose: 
+        print('Mem. usage decreased to {:5.2f} Mb ({:.1f}% reduction)'.format(end_mem, 100 * (start_mem - end_mem) / start_mem))
+
+def make_batches(size, batch_size):
+    nb_batch = int(np.ceil(size/float(batch_size)))
+    return [ (i*batch_size, min(size, (i+1)*batch_size)) for i in range(0, nb_batch) ]
+
+def batch_generator1(X, batch_size, trn_idx):
+    sample_size = len(trn_idx)
+    index_array = np.arange(sample_size)
+    batches = make_batches(sample_size, batch_size)
+    for batch_index, (batch_start, batch_end) in enumerate(batches):
+        print (batch_index*batch_size)
+        batch_ids = index_array[batch_start:batch_end]
+        yield X.iloc[np.array(trn_idx)[batch_ids]].values
+
+@performance
+def to_bin(x,file,idx):
+    print('to bin', file)
+    train_np = np.array([], dtype=np.float32)
+    count = 0
+    for chunk in batch_generator1(x, 2000000, idx):
+        temp = np.array(chunk.reshape(-1), dtype=np.float32)
+        train_np = np.append(train_np, temp)
+        del temp; gc.collect()
+        count += chunk.shape[0]
+        del chunk; gc.collect()
+        print ("#", count)
+    train_np.tofile(file)
 
 
 if __name__ == '__main__':

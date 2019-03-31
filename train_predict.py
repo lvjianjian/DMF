@@ -19,8 +19,9 @@ import xgboost as xgb
 from sklearn.model_selection import KFold, StratifiedKFold, train_test_split
 from sklearn.metrics import mean_squared_error
 from sklearn.base import clone
-from DMF.util import detect_cates_for_narrayx, transform_float_to_int_for_narrayx
+from DMF.util import detect_cates_for_narrayx, transform_float_to_int_for_narrayx, performance, to_bin
 import gc
+
 
 # lgb params
 LGB_REGRESS_PARAMS = {
@@ -66,22 +67,23 @@ def _get_label_size(trainy):
 def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
               validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
               predict_prob=True, feature_importances=None, group=None, model_save_file=None,
-              feature_names="auto", isFromFile=False):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
+              feature_names="auto", isFromFile=False, FileName=None,categorical_features='auto'):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
     gbm = lgb_train_model(trainx, trainy, params, use_valid, valid_ratio, validx, validy,
                           num_boost_round, early_stopping_rounds, random_state, feature_names, group,
-                          isFromFile=isFromFile)
+                          isFromFile=isFromFile, FileName=FileName,categorical_features=categorical_features)
     if (model_save_file is not None):
         gbm.save_model(model_save_file, num_iteration=gbm.best_iteration)
     if (type(feature_importances) == list):
         names, importances = zip(*(sorted(zip(gbm.feature_name(), gbm.feature_importance()), key=lambda x: -x[1])))
         feature_importances += list((zip(names, importances)))
+        feature_importances.append(('best_score',gbm.best_score))
     return predict(gbm, "lgb", testx, predict_proba=predict_prob)
 
 
+@performance
 def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, validx=None,
                     validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
-
-                    feature_names=None, group=None, isFromFile=False):
+                    feature_names=None, group=None, isFromFile=False,FileName=None,categorical_features='auto'):
     """
     lgb train 返回train的model
     :param trainx:
@@ -100,18 +102,20 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
     if (feature_names is None):
         feature_names = "auto"
     if (isFromFile):
-        if (type(trainx) is pd.DataFrame):
-            feature_names = list(trainx.columns)
-        if (type(feature_names) is not list and type(feature_names) is not pd.Index and feature_names == "auto"):
-            print("please set feature names when isFromFile == True")
-            exit(1)
         num_sample, num_feature = trainx.shape
-        del trainx
-        deltrainx = True
-        # if(not os.path.exists('./X_train_cache.bin')):
-        train_np = trainx.values.reshape(-1).astype(np.float32)
-        train_np.tofile('./X_train_cache.bin')
-        del train_np
+        if(FileName is None):
+            if (type(trainx) is pd.DataFrame):
+                feature_names = list(trainx.columns)
+            if (type(feature_names) is not list and type(feature_names) is not pd.Index and feature_names == "auto"):
+                print("please set feature names when isFromFile == True")
+                exit(1)
+
+            print('shape', trainx.shape)
+            # if(not os.path.exists('./X_train_cache.bin')):
+            FileName = './X_train_cache.bin'
+            to_bin(trainx, FileName, np.arange(trainx.shape[0]))
+            del trainx
+            deltrainx = True
 
     if use_valid:
         if (validx is None):
@@ -120,18 +124,19 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
                                                               test_size=valid_ratio,
                                                               random_state=random_state)
         if (isFromFile):
-            lgb_train_ = lgb.Dataset('./X_train_cache.bin',
+            lgb_train_ = lgb.Dataset(FileName,
                                      label=trainy,
                                      feature_name=feature_names,
                                      isFromFile=True,
-                                     shape=(num_sample, num_feature))
+                                     shape=(num_sample, num_feature),
+                                    categorical_feature=categorical_features)
         else:
-            lgb_train_ = lgb.Dataset(trainx, trainy, feature_name=feature_names)
-
-        del trainx
+            lgb_train_ = lgb.Dataset(trainx, trainy, feature_name=feature_names,categorical_feature=categorical_features)
+        if(not deltrainx):
+            del trainx
         del trainy
         gc.collect()
-        lgb_eval = lgb.Dataset(validx, validy, reference=lgb_train_)
+        lgb_eval = lgb.Dataset(validx, validy, reference=lgb_train_,categorical_feature=categorical_features)
         del validx
         del validy
         gc.collect()
@@ -140,16 +145,19 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
                         lgb_train_,
                         num_boost_round=num_boost_round,
                         valid_sets=lgb_eval,
-                        early_stopping_rounds=early_stopping_rounds)
+                        early_stopping_rounds=early_stopping_rounds,
+                        verbose_eval=early_stopping_rounds)
     else:
         if (isFromFile):
             lgb_train_ = lgb.Dataset('./X_train_cache.bin',
                                      label=trainy,
                                      feature_name=feature_names,
                                      isFromFile=True,
-                                     shape=(num_sample, num_feature))
+                                     shape=(num_sample, num_feature),
+                                    categorical_feature=categorical_features)
         else:
-            lgb_train_ = lgb.Dataset(trainx, trainy, feature_name=feature_names, group=group)
+            lgb_train_ = lgb.Dataset(trainx, trainy, feature_name=feature_names, group=group,
+                                     categorical_feature=categorical_features)
         if(not deltrainx):
             del trainx
         del trainy
@@ -307,7 +315,6 @@ def sklearn_cv(model, trainx, trainy, cv=5, random_state=2018, train_all_label=T
             final_score.append(func(trainy[test_index], pred))
     return final_score
 
-
 def sklearn_predict(model, trainx, trainy, testx, train_all_label=True):
     label_size = _get_label_size(trainy)
     if train_all_label:
@@ -399,7 +406,10 @@ def kfold_train(kfold, model_type, trainx, trainy, testx, params=None, use_valid
     preds = []
     kf = StratifiedKFold(n_splits=kfold, shuffle=True, random_state=random_state)
     for _train, _test in kf.split(kfold_split_values, kfold_split_values):
-        sub_trainx = trainx[_train]
+        if(type(trainx) is np.ndarray):
+            sub_trainx = trainx[_train]
+        else:
+            sub_trainx = trainx.iloc[_train]
         sub_trainy = trainy[_train]
         pred = general_train(model_type, sub_trainx, sub_trainy, testx,params, use_valid, valid_ratio, validx, validy,
                              num_boost_round, early_stopping_rounds, random_state, predict_prob,
