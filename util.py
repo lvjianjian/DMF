@@ -128,6 +128,7 @@ def dump_feature_remove_main_id(f):  # 定义装饰器函数，功能是传进�
                 if r[c].dtype == 'float64':
                     r[c] = r[c].astype('float32')
             r.reset_index(drop=True, inplace=True)
+            downcast(r)
             r.to_feather(dump_path)
         gc.collect()
         t_end = time.time()
