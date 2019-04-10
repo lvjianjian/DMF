@@ -136,3 +136,37 @@ class MeanEncoder:
 
         return X_new
 
+
+def hcc_encode(train_df, test_df, variable, target, prior_prob, k, f=1, g=1, r_k=None):
+    """
+    See "A Preprocessing Scheme for High-Cardinality Categorical Attributes in
+    Classification and Prediction Problems" by Daniele Micci-Barreca
+    """
+    hcc_name = "_".join(["hcc"] + variable + [target])
+
+    grouped = train_df.groupby(variable, as_index=False)[target].agg({"size": "size", "mean": "mean"})
+    grouped["lambda"] = 1 / (g + np.exp((k - grouped["size"]) / f))
+    grouped[hcc_name] = grouped["lambda"] * grouped["mean"] + (1 - grouped["lambda"]) * prior_prob
+
+    df = test_df[variable].merge(grouped, on=variable, how="left")[hcc_name].fillna(prior_prob)
+    if r_k: df *= np.random.uniform(1 - r_k, 1 + r_k, len(test_df))     # Add uniform noise. Not mentioned in original paper
+    return df.values, hcc_name
+
+# useage:
+
+# for _target in ['finish', 'like']:
+#     print(_target)
+#     target = train[_target]
+#     prior = target.mean()
+#     for _i,variable in enumerate(mean_encoded_variables):
+#         skf = StratifiedKFold(5,shuffle=True,random_state=2019+_i)
+#         print (variable)
+#         variable = [variable]
+#         v, n = hcc_encode(train[variable+[_target]], test[variable+[_target]], variable, _target, prior, k=5, r_k=None)
+#         test[n] = v
+#         fs.append(n)
+#         for train_idx, val_idx in skf.split(target, target):
+#             v, n = hcc_encode(train.ix[train.iloc[train_idx].index, variable+[_target]], train.ix[train.iloc[val_idx].index, variable+[_target]], variable, _target, prior, k=5, r_k=0.01)
+#             train.ix[train.iloc[val_idx].index, n] = v
+#         print (train.shape, test.shape)
+# interaction = pd.concat([train,test])

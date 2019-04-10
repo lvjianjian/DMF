@@ -111,7 +111,6 @@ def dump_feature_remove_main_id(f):  # 定义装饰器函数，功能是传进�
             dump_path = os.path.join(path, f.__name__ + '.feather')
         if os.path.exists(dump_path):
             r = pd.read_feather(dump_path, nthreads=4)
-            downcast(r)
         else:
             r = f(*args, **kw)
             r.sort_values(by=SORT_ID, inplace=True)
@@ -134,7 +133,6 @@ def dump_feature_remove_main_id(f):  # 定义装饰器函数，功能是传进�
         t_end = time.time()
         print('call %s() in %fs' % (f.__name__, (t_end - t_start)))
         return r
-
     return fn
 
 
