@@ -14,7 +14,7 @@ import torch.nn as nn
 import torch
 
 class Embedding3D(nn.Module):
-    __constants__ = ['num_embeddings', 'embedding_dim','embedding_dim2', 'padding_idx', 'max_norm',
+    __constants__ = ['num_embeddings', 'embedding_dim', 'embedding_dim2', 'padding_idx', 'max_norm',
                      'norm_type', 'scale_grad_by_freq', 'sparse', '_weight']
 
     def __init__(self, n, f, k):
