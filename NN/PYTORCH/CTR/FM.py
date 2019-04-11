@@ -11,8 +11,7 @@
 @Update Date: 18-9-27, 22:52
 """
 
-import torch.nn as nn
-import torch
+from DMF.NN.PYTORCH.CTR import *
 
 class FM(nn.Module):
     def __init__(self, n, k, field_size):
@@ -47,33 +46,3 @@ class FM(nn.Module):
     def predict(self, x):
         return self.sigmoid(self(x))
 
-def fm_part1(x, use_cuda=True):
-    '''
-    :param x: (batch_size, field_size, k)
-    :return: (batch_size, field_size * (field_size - 1) // 2)
-    '''
-    x = x.unsqueeze(2) * x.unsqueeze(1)
-    x = x.sum(-1)
-    mask = torch.ones_like(x)
-    mask = torch.triu(mask[0,:,:],diagonal=1)
-    if(use_cuda):
-        x = torch.masked_select(x, mask.type(torch.cuda.ByteTensor)).view(x.size(0),-1)
-    else:
-        x = torch.masked_select(x, mask.type(torch.ByteTensor)).view(x.size(0),-1)
-    return x
-
-def fm_part2(x, use_cuda=True):
-    '''
-    :param x: (batch_size, field_size, k)
-    :return: (batch_size, field_size * (field_size - 1) // 2 * k)
-    '''
-    x = x.unsqueeze(2) * x.unsqueeze(1)
-    mask = torch.ones_like(x)
-    mask = torch.triu(mask[0, :, :, 0], diagonal=1)
-    mask = mask.repeat(x.size(0), 1, 1)
-    mask = mask.unsqueeze(3)
-    if(use_cuda):
-        x = torch.masked_select(x, mask.type(torch.cuda.ByteTensor)).view(x.size(0), -1)
-    else:
-        x = torch.masked_select(x, mask.type(torch.ByteTensor)).view(x.size(0), -1)
-    return x
