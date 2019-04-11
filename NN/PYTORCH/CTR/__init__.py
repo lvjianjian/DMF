@@ -107,7 +107,7 @@ def deep(x, deeps, activation='identity'):
     :param activation:
     :return: (b, last linear hidden)
     '''
-    for _nn in range(deeps):
+    for _nn in deeps:
         x = _nn(x)
         x = by_activation(x,activation)
     return x
