@@ -55,8 +55,6 @@ class xDeepFM(nn.Module):
         output2 = self._deep(x)
         return torch.cat([output1, output2], 1)
 
-
-
 class xDeepCNN(nn.Module):
     def __init__(self, f, k, deep_n, deep_hidden, cnn_n, cnn_hidden):
         super(xDeepCNN, self).__init__()
