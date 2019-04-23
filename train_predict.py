@@ -382,11 +382,12 @@ def predict(trained_model, model_name, testx, predict_proba=True, feature_names=
 def general_train(model_type, trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
                   validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
                   predict_prob=True, feature_importances=None, group=None, model_save_file=None,
-                  feature_names="auto", isFromFile=False, model=None, cate_threshold=10):
+                  feature_names="auto", isFromFile=False, model=None, cate_threshold=10,categorical_features='auto'):
     if (model_type == 'lgb'):
         return lgb_train(trainx, trainy, testx, params, use_valid, valid_ratio, validx, validy,
                          num_boost_round, early_stopping_rounds, random_state, predict_prob,
-                         feature_importances, group, model_save_file, feature_names, isFromFile)
+                         feature_importances, group, model_save_file, feature_names, isFromFile,
+                        categorical_features=categorical_features)
     elif (model_type == 'xgb'):
         return xgb_train(trainx, trainy, testx, params, use_valid, valid_ratio, validx, validy,
                          num_boost_round, early_stopping_rounds, random_state, predict_prob,
@@ -400,7 +401,7 @@ def general_train(model_type, trainx, trainy, testx, params, use_valid=True, val
 def kfold_train(kfold, model_type, trainx, trainy, testx, params=None, use_valid=True, valid_ratio=0.2, validx=None,
                 validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
                 predict_prob=True, feature_importances=None, group=None, model_save_file=None,
-                feature_names="auto", isFromFile=False, model=None, cate_threshold=10, use_all_data=False, all_data_model_weight=0.2,kfold_split_values=None):
+                feature_names="auto", isFromFile=False, model=None, cate_threshold=10, use_all_data=False, all_data_model_weight=0.2,kfold_split_values=None,categorical_features='auto'):
     if(kfold_split_values is None):
         kfold_split_values = trainy
     preds = []
@@ -413,14 +414,16 @@ def kfold_train(kfold, model_type, trainx, trainy, testx, params=None, use_valid
         sub_trainy = trainy[_train]
         pred = general_train(model_type, sub_trainx, sub_trainy, testx,params, use_valid, valid_ratio, validx, validy,
                              num_boost_round, early_stopping_rounds, random_state, predict_prob,
-                             feature_importances, group, model_save_file, feature_names, isFromFile,model,cate_threshold)
+                             feature_importances, group, model_save_file, feature_names, isFromFile,model,cate_threshold,
+                            categorical_features=categorical_features)
         preds.append(pred)
     pred = np.mean(preds, axis=0)
 
     if(use_all_data):
         _pred = general_train(model_type, trainx, trainy, testx,params, use_valid, valid_ratio, validx, validy,
                              num_boost_round, early_stopping_rounds, random_state, predict_prob,
-                             feature_importances, group, model_save_file, feature_names, isFromFile,model,cate_threshold)
+                             feature_importances, group, model_save_file, feature_names, isFromFile,model,cate_threshold,
+                             categorical_features=categorical_features)
         pred = (1-all_data_model_weight) * pred + all_data_model_weight * _pred
     return pred
 
