@@ -729,6 +729,16 @@ def to_bin(x,file,idx):
         print ("#", count)
     train_np.tofile(file)
 
+@performance
+def set_newid(alldata, cate_ids):
+    for _c in cate_ids:
+        alldata[_c] = alldata[_c].astype(str)
+    _interid = np.intersect1d(alldata[alldata.type == 'test'][_c], alldata[alldata.type!='test'][_c])
+    _d = dict(zip(_interid,range(len(_interid))))
+    alldata[_c + '_newid'] = alldata[_c].apply(lambda x: _d.setdefault(x,-1))
+    alldata[_c + '_newid'] = alldata[_c + '_newid'].astype(int)
+    return alldata
+
 
 if __name__ == '__main__':
 
