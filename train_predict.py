@@ -67,7 +67,8 @@ def _get_label_size(trainy):
 def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
               validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
               predict_prob=True, feature_importances=None, group=None, model_save_file=None,
-              feature_names="auto", isFromFile=False, FileName=None,categorical_features='auto'):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
+              feature_names="auto", isFromFile=False, FileName=None,categorical_features='auto',
+              eval_testx = None):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
     gbm = lgb_train_model(trainx, trainy, params, use_valid, valid_ratio, validx, validy,
                           num_boost_round, early_stopping_rounds, random_state, feature_names, group,
                           isFromFile=isFromFile, FileName=FileName,categorical_features=categorical_features)
@@ -77,7 +78,10 @@ def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, va
         names, importances = zip(*(sorted(zip(gbm.feature_name(), gbm.feature_importance()), key=lambda x: -x[1])))
         feature_importances += list((zip(names, importances)))
         feature_importances.append(('best_score',gbm.best_score))
-    return predict(gbm, "lgb", testx, predict_proba=predict_prob)
+    if(eval_testx is None):
+        return predict(gbm, "lgb", testx, predict_proba=predict_prob)
+    else:
+        return predict(gbm, "lgb", testx, predict_proba=predict_prob), predict(gbm, "lgb", eval_testx, predict_proba=predict_prob)
 
 
 @performance
@@ -189,7 +193,7 @@ def lgb_predict(trainx, trainy, testx,
 def xgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
               validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
               predict_prob=True, feature_importances=None, model_save_file=None,
-              feature_names=None):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
+              feature_names=None,eval_testx = None):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
     gbm = xgb_train_model(trainx, trainy, params, use_valid, valid_ratio, validx, validy,
                           num_boost_round, early_stopping_rounds, random_state, feature_names)
     if (model_save_file is not None):
@@ -197,8 +201,11 @@ def xgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, va
     if (type(feature_importances) == list):
         names, importances = zip(*(sorted(gbm.get_fscore().items(), key=lambda x: -x[1])))
         feature_importances += list((zip(names, importances)))
-    return predict(gbm, "xgb", testx, predict_proba=predict_prob, feature_names=feature_names)
-
+    if(eval_testx is None):
+        return predict(gbm, "xgb", testx, predict_proba=predict_prob,feature_names=feature_names)
+    else:
+        return predict(gbm, "xgb", testx, predict_proba=predict_prob,feature_names=feature_names),\
+               predict(gbm, "xgb", eval_testx, predict_proba=predict_prob,feature_names=feature_names)
 
 def xgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, validx=None,
                     validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
@@ -330,9 +337,13 @@ def sklearn_predict(model, trainx, trainy, testx, train_all_label=True):
             return sklearn_train(model, trainx, trainy, testx)
 
 
-def sklearn_train(model, trainx, trainy, testx, preditc_proba=False):
+def sklearn_train(model, trainx, trainy, testx, preditc_proba=False,eval_testx = None):
     model = sklearn_train_model(model, trainx, trainy)
-    return predict(model, model.__class__.__name__, testx, preditc_proba)
+    if(eval_testx is None):
+        return predict(model, model.__class__.__name__, testx, preditc_proba)
+    else:
+        return predict(model, model.__class__.__name__, testx, preditc_proba), \
+               predict(model, model.__class__.__name__, eval_testx, preditc_proba)
 
 
 def sklearn_train_model(model, trainx, trainy):
@@ -350,10 +361,13 @@ def catboost_train_model(model, trainx, trainy, cate_threshold=10):
     return model
 
 
-def catboost_train(model, trainx, trainy, testx, cate_threshold=10, predict_proba=True):
+def catboost_train(model, trainx, trainy, testx, cate_threshold=10, predict_proba=True,eval_testx = None):
     model = catboost_train_model(model, trainx, trainy, cate_threshold)
     testx = transform_float_to_int_for_narrayx(testx, model.cates)
-    return predict(model, "catboost", testx, predict_proba)
+    if(eval_testx is None):
+        return predict(model, "catboost", testx, predict_proba)
+    else:
+        return predict(model, "catboost", testx, predict_proba), predict(model, "catboost", eval_testx, predict_proba)
 
 
 def predict(trained_model, model_name, testx, predict_proba=True, feature_names=None):
@@ -382,40 +396,62 @@ def predict(trained_model, model_name, testx, predict_proba=True, feature_names=
 def general_train(model_type, trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
                   validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
                   predict_prob=True, feature_importances=None, group=None, model_save_file=None,
-                  feature_names="auto", isFromFile=False, model=None, cate_threshold=10,categorical_features='auto'):
+                  feature_names="auto", isFromFile=False, model=None, cate_threshold=10, categorical_features='auto',
+                  eval_testx = None):
     if (model_type == 'lgb'):
         return lgb_train(trainx, trainy, testx, params, use_valid, valid_ratio, validx, validy,
                          num_boost_round, early_stopping_rounds, random_state, predict_prob,
                          feature_importances, group, model_save_file, feature_names, isFromFile,
-                        categorical_features=categorical_features)
+                        categorical_features=categorical_features,eval_testx=eval_testx)
     elif (model_type == 'xgb'):
         return xgb_train(trainx, trainy, testx, params, use_valid, valid_ratio, validx, validy,
                          num_boost_round, early_stopping_rounds, random_state, predict_prob,
-                         feature_importances, model_save_file, feature_names)
+                         feature_importances, model_save_file, feature_names,eval_testx=eval_testx)
     elif (model_type == 'catboost'):
-        return catboost_train(model, trainx, trainy, testx, cate_threshold, predict_prob)
+        return catboost_train(model, trainx, trainy, testx, cate_threshold, predict_prob,eval_testx=eval_testx)
     else:  # sklearn
-        return sklearn_train(model, trainx, trainy, testx, predict_prob)
+        return sklearn_train(model, trainx, trainy, testx, predict_prob,eval_testx=eval_testx)
 
 # k折train
 def kfold_train(kfold, model_type, trainx, trainy, testx, params=None, use_valid=True, valid_ratio=0.2, validx=None,
                 validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
                 predict_prob=True, feature_importances=None, group=None, model_save_file=None,
-                feature_names="auto", isFromFile=False, model=None, cate_threshold=10, use_all_data=False, all_data_model_weight=0.2,kfold_split_values=None,categorical_features='auto'):
+                feature_names="auto", isFromFile=False, model=None, cate_threshold=10, use_all_data=False,
+                all_data_model_weight=0.2, kfold_split_values=None, categorical_features='auto',
+                oof_metric = None): # oof_metric is a dict, key is name, value is function(y_true, y_predict)
     if(kfold_split_values is None):
         kfold_split_values = trainy
     preds = []
     kf = StratifiedKFold(n_splits=kfold, shuffle=True, random_state=random_state)
+    eval_trainx = None
+    if(oof_metric is not None):
+        eval_res = {}
+        for _k in oof_metric.keys():
+            eval_res[_k] = []
     for _train, _test in kf.split(kfold_split_values, kfold_split_values):
         if(type(trainx) is np.ndarray):
             sub_trainx = trainx[_train]
+            if(oof_metric is not None):
+                eval_trainx = trainx[_test]
         else:
             sub_trainx = trainx.iloc[_train]
+            if(oof_metric is not None):
+                eval_trainx = trainx.iloc[_test]
         sub_trainy = trainy[_train]
-        pred = general_train(model_type, sub_trainx, sub_trainy, testx,params, use_valid, valid_ratio, validx, validy,
-                             num_boost_round, early_stopping_rounds, random_state, predict_prob,
-                             feature_importances, group, model_save_file, feature_names, isFromFile,model,cate_threshold,
-                            categorical_features=categorical_features)
+        if(oof_metric is not None):
+            eval_trainy = trainy[_test]
+            pred, eval_predicts = general_train(model_type, sub_trainx, sub_trainy, testx,params, use_valid, valid_ratio, validx, validy,
+                                 num_boost_round, early_stopping_rounds, random_state, predict_prob,
+                                 feature_importances, group, model_save_file, feature_names, isFromFile,model,cate_threshold,
+                                categorical_features=categorical_features, eval_testx= eval_trainx)
+            for _k, _v in oof_metric.items():
+                eval_res[_k].append(_v(eval_trainy, eval_predicts))
+
+        else:
+            pred = general_train(model_type, sub_trainx, sub_trainy, testx,params, use_valid, valid_ratio, validx, validy,
+                                 num_boost_round, early_stopping_rounds, random_state, predict_prob,
+                                 feature_importances, group, model_save_file, feature_names, isFromFile,model,cate_threshold,
+                                 categorical_features=categorical_features, eval_testx= eval_trainx)
         preds.append(pred)
     pred = np.mean(preds, axis=0)
 
@@ -425,7 +461,12 @@ def kfold_train(kfold, model_type, trainx, trainy, testx, params=None, use_valid
                              feature_importances, group, model_save_file, feature_names, isFromFile,model,cate_threshold,
                              categorical_features=categorical_features)
         pred = (1-all_data_model_weight) * pred + all_data_model_weight * _pred
-    return pred
+    if(oof_metric is None):
+        return pred
+    else:
+        for _k in eval_res.keys():
+            eval_res[_k] = np.mean(eval_res[_k])
+        return pred, eval_res
 
 
 # 半监督 train
