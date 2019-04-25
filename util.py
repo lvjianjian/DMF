@@ -155,6 +155,31 @@ def log(labels):
 def exp(labels):
     return np.exp(labels) - 1
 
+def getDegree(pointsA, pointsB):
+    """
+    Args:
+        point pA(latA, lonA)
+        point pB(latB, lonB)
+        lat 0-90
+        lon 0-180
+    Returns:
+        bearing between the two GPS points,
+        default: the basis of heading direction is north
+    """
+    latA = pointsA[:,0]
+    lonA = pointsA[:,1]
+    latB = pointsB[:,0]
+    lonB = pointsB[:,1]
+    radLatA = np.radians(latA)
+    radLonA = np.radians(lonA)
+    radLatB = np.radians(latB)
+    radLonB = np.radians(lonB)
+    dLon = radLonB - radLonA
+    y = np.sin(dLon) * np.cos(radLatB)
+    x = np.cos(radLatA) * np.sin(radLatB) - np.sin(radLatA) * np.cos(radLatB) * np.cos(dLon)
+    brng = np.degrees(np.arctan2(y, x))
+    brng = (brng + 360) % 360
+    return brng
 
 def euclidean(values1, values2):
     """
