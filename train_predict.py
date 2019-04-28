@@ -68,10 +68,11 @@ def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, va
               validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
               predict_prob=True, feature_importances=None, group=None, model_save_file=None,
               feature_names="auto", isFromFile=False, FileName=None,categorical_features='auto',
-              eval_testx = None):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
+              eval_testx = None, trainx_weight = None):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
     gbm = lgb_train_model(trainx, trainy, params, use_valid, valid_ratio, validx, validy,
                           num_boost_round, early_stopping_rounds, random_state, feature_names, group,
-                          isFromFile=isFromFile, FileName=FileName,categorical_features=categorical_features)
+                          isFromFile=isFromFile, FileName=FileName,categorical_features=categorical_features,
+                          trainx_weight = trainx_weight)
     if (model_save_file is not None):
         gbm.save_model(model_save_file, num_iteration=gbm.best_iteration)
     if (type(feature_importances) == list):
@@ -87,7 +88,8 @@ def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, va
 @performance
 def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, validx=None,
                     validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
-                    feature_names=None, group=None, isFromFile=False,FileName=None,categorical_features='auto'):
+                    feature_names=None, group=None, isFromFile=False,FileName=None,categorical_features='auto',
+                    trainx_weight = None):
     """
     lgb train 返回train的model
     :param trainx:
@@ -122,6 +124,9 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
             deltrainx = True
 
     if use_valid:
+        if(trainx_weight is not None):
+            print('trainx_weight is not None and use valid, exit')
+            exit(1)
         if (validx is None):
             trainx, validx, trainy, validy = train_test_split(trainx,
                                                               trainy,
@@ -158,10 +163,11 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
                                      feature_name=feature_names,
                                      isFromFile=True,
                                      shape=(num_sample, num_feature),
-                                    categorical_feature=categorical_features)
+                                     categorical_feature=categorical_features,
+                                     weight=trainx_weight)
         else:
             lgb_train_ = lgb.Dataset(trainx, trainy, feature_name=feature_names, group=group,
-                                     categorical_feature=categorical_features)
+                                     categorical_feature=categorical_features, weight=trainx_weight)
         if(not deltrainx):
             del trainx
         del trainy
