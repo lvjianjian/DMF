@@ -228,7 +228,7 @@ class CateEmbedding(object):
             res2 = res2.iloc[:, 0] + " " + res2.iloc[:, 1]
             adj = pd.concat([res1, res2])
             adj.to_csv(adj_path, index=None)
-            cm = "deepwalk --input {}  --output {} --representation-size {} --workers 8 --number-walks 30".format(
+            cm = "deepwalk --input {}  --output {} --representation-size {} --workers 16 --number-walks 30".format(
                     adj_path, emb_path, n_component)
             os.system(cm)
             emb = self._read_emb(emb_path)
@@ -264,14 +264,14 @@ class CateEmbedding(object):
         :return: df[MAIN_ID,cate1_embedding_column_i,cate2_embedding_column_i] (i： 0 - n_components-1)
         """
         if (decomposition_to1 <= 0 or decomposition_to2 <= 0):
-            cate1_df, cate2_df = self.cate_embeding_by_all_deep_walk(df, cate1, cate2, n_components, dataPath)
+            cate1_df, cate2_df = self.cate_embeding_by_all_deep_walk(dataPath, df, cate1, cate2, n_components)
 
         if (decomposition_to1 > 0):
             _c = "{}_{}_{}_all_deepwalk".format(cate1, cate2, n_components)
             _c1 = "{}_{}".format(_c, cate1)
             cate1_path = os.path.join(dataPath, _c1 + ".pickle")
             if (not os.path.exists(cate1_path)):
-                self.cate_embeding_by_all_deep_walk(df, cate1, cate2, n_components, dataPath)
+                self.cate_embeding_by_all_deep_walk(dataPath, df, cate1, cate2, n_components)
             cate1_df = decomposition_ipca(dataPath, _c1 + ".pickle", decomposition_to1)
 
         if (decomposition_to2 > 0):
@@ -279,7 +279,7 @@ class CateEmbedding(object):
             _c2 = "{}_{}".format(_c, cate2)
             cate2_path = os.path.join(dataPath, _c2 + ".pickle")
             if (not os.path.exists(cate2_path)):
-                self.cate_embeding_by_all_deep_walk(df, cate1, cate2, n_components, dataPath)
+                self.cate_embeding_by_all_deep_walk(dataPath, df, cate1, cate2, n_components)
             cate2_df = decomposition_ipca(dataPath, _c2 + ".pickle", decomposition_to2)
 
         c_set = set()
@@ -330,7 +330,7 @@ class CateEmbedding(object):
             _c1 = "{}_{}".format(_c, cate1)
             cate1_path = os.path.join(dataPath, _c1 + ".pickle")
             if (not os.path.exists(cate1_path)):
-                self.cate_embeding_by_all_deep_walk(df, cate1, cate2, n_components, dataPath)
+                self.cate_embeding_by_all_deep_walk(dataPath, df, cate1, cate2, n_components)
             cate1_df = decomposition_ipca(dataPath, _c1 + ".pickle", decomposition_to)
         else:
             cate1_df, cate2_df = self.cate_embeding_by_all_deep_walk(dataPath, df, cate1, cate2, n_components)
@@ -370,10 +370,10 @@ class CateEmbedding(object):
             _c2 = "{}_{}".format(_c, cate2)
             cate2_path = os.path.join(dataPath, _c2 + ".pickle")
             if (not os.path.exists(cate2_path)):
-                self.cate_embeding_by_all_deep_walk(df, cate1, cate2, n_components, dataPath)
+                self.cate_embeding_by_all_deep_walk(dataPath, df, cate1, cate2, n_components)
             cate2_df = decomposition_ipca(dataPath, _c2 + ".pickle", decomposition_to)
         else:
-            cate1_df, cate2_df = self.cate_embeding_by_all_deep_walk(df, cate1, cate2, n_components, dataPath)
+            cate1_df, cate2_df = self.cate_embeding_by_all_deep_walk(dataPath, df, cate1, cate2, n_components)
         c_set = set()
         for _c in self.MAIN_ID:
             c_set.add(_c)

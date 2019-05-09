@@ -68,11 +68,11 @@ def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, va
               validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
               predict_prob=True, feature_importances=None, group=None, model_save_file=None,
               feature_names="auto", isFromFile=False, FileName=None,categorical_features='auto',
-              eval_testx = None, trainx_weight = None):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
+              eval_testx = None, trainx_weight = None, feval=None):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
     gbm = lgb_train_model(trainx, trainy, params, use_valid, valid_ratio, validx, validy,
                           num_boost_round, early_stopping_rounds, random_state, feature_names, group,
                           isFromFile=isFromFile, FileName=FileName,categorical_features=categorical_features,
-                          trainx_weight = trainx_weight)
+                          trainx_weight = trainx_weight,feval=feval)
     if (model_save_file is not None):
         gbm.save_model(model_save_file, num_iteration=gbm.best_iteration)
     if (type(feature_importances) == list):
@@ -89,7 +89,7 @@ def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, va
 def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, validx=None,
                     validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
                     feature_names=None, group=None, isFromFile=False,FileName=None,categorical_features='auto',
-                    trainx_weight = None):
+                    trainx_weight = None,feval=None):
     """
     lgb train 返回train的model
     :param trainx:
@@ -152,10 +152,11 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
         params_copy = params.copy()
         gbm = lgb.train(params_copy,
                         lgb_train_,
-                        num_boost_round=num_boost_round,
+                        num_boost_round=num_boost_round*100,
                         valid_sets=lgb_eval,
                         early_stopping_rounds=early_stopping_rounds,
-                        verbose_eval=early_stopping_rounds)
+                        verbose_eval=int(early_stopping_rounds / 10),
+                       feval=feval)
     else:
         if (isFromFile):
             lgb_train_ = lgb.Dataset('./X_train_cache.bin',
@@ -199,9 +200,9 @@ def lgb_predict(trainx, trainy, testx,
 def xgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, validx=None,
               validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
               predict_prob=True, feature_importances=None, model_save_file=None,
-              feature_names=None,eval_testx = None):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
+              feature_names=None,eval_testx = None,feval=None):  # 避免过拟合，采用交叉验证，验证集占训练集20%，固定随机种子（random_state)
     gbm = xgb_train_model(trainx, trainy, params, use_valid, valid_ratio, validx, validy,
-                          num_boost_round, early_stopping_rounds, random_state, feature_names)
+                          num_boost_round, early_stopping_rounds, random_state, feature_names,feval=feval)
     if (model_save_file is not None):
         gbm.save_model(model_save_file)
     if (type(feature_importances) == list):
@@ -215,8 +216,7 @@ def xgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, va
 
 def xgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, validx=None,
                     validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
-
-                    feature_names=None):
+                    feature_names=None,feval=None):
     """
     xgb train 返回train的model
     :param trainx:
@@ -249,8 +249,8 @@ def xgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
         gbm = xgb.train(params_copy,
                         xgb_train_,
                         num_boost_round=num_boost_round,
-                        evals=xgb_eval,
-                        early_stopping_rounds=early_stopping_rounds)
+                        evals=[(xgb_eval,'valid')],
+                        early_stopping_rounds=early_stopping_rounds,feval=feval)
     else:
         xgb_train_ = xgb.DMatrix(trainx, trainy, feature_names=feature_names)
         del trainx
@@ -343,13 +343,13 @@ def sklearn_predict(model, trainx, trainy, testx, train_all_label=True):
             return sklearn_train(model, trainx, trainy, testx)
 
 
-def sklearn_train(model, trainx, trainy, testx, preditc_proba=False,eval_testx = None):
+def sklearn_train(model, trainx, trainy, testx, predict_proba=False,eval_testx = None):
     model = sklearn_train_model(model, trainx, trainy)
     if(eval_testx is None):
-        return predict(model, model.__class__.__name__, testx, preditc_proba)
+        return predict(model, model.__class__.__name__, testx, predict_proba)
     else:
-        return predict(model, model.__class__.__name__, testx, preditc_proba), \
-               predict(model, model.__class__.__name__, eval_testx, preditc_proba)
+        return predict(model, model.__class__.__name__, testx, predict_proba), \
+               predict(model, model.__class__.__name__, eval_testx, predict_proba)
 
 
 def sklearn_train_model(model, trainx, trainy):
@@ -358,18 +358,20 @@ def sklearn_train_model(model, trainx, trainy):
     return model
 
 
-def catboost_train_model(model, trainx, trainy, cate_threshold=10):
+def catboost_train_model(model, trainx, trainy, cate_threshold=10,cates =None):
     model = clone(model)
-    cates = detect_cates_for_narrayx(trainx, cate_threshold)
-    trainx = transform_float_to_int_for_narrayx(trainx, cates)
+    if(cates is None):
+        cates = detect_cates_for_narrayx(trainx, cate_threshold)
+        trainx = transform_float_to_int_for_narrayx(trainx, cates)
     model.fit(trainx, trainy, cates)
     model.cates = cates
     return model
 
 
-def catboost_train(model, trainx, trainy, testx, cate_threshold=10, predict_proba=True,eval_testx = None):
-    model = catboost_train_model(model, trainx, trainy, cate_threshold)
-    testx = transform_float_to_int_for_narrayx(testx, model.cates)
+def catboost_train(model, trainx, trainy, testx, cate_threshold=10, predict_proba=True,eval_testx = None,cates=None):
+    model = catboost_train_model(model, trainx, trainy, cate_threshold,cates)
+    if(cates is None):
+        testx = transform_float_to_int_for_narrayx(testx, model.cates)
     if(eval_testx is None):
         return predict(model, "catboost", testx, predict_proba)
     else:
@@ -390,11 +392,8 @@ def predict(trained_model, model_name, testx, predict_proba=True, feature_names=
         testDM = xgb.DMatrix(testx, feature_names=feature_names)
         return trained_model.predict(testDM)
     else:
-        if (model_name == "catboost"):
-            testx = transform_float_to_int_for_narrayx(testx, trained_model.cates)
-
         if (predict_proba):
-            return trained_model.predict_proba(testx)[:, 1]
+            return trained_model.predict_proba(testx)
         else:
             return trained_model.predict(testx)
 
@@ -403,18 +402,18 @@ def general_train(model_type, trainx, trainy, testx, params, use_valid=True, val
                   validy=None, num_boost_round=500, early_stopping_rounds=5, random_state=2018,
                   predict_prob=True, feature_importances=None, group=None, model_save_file=None,
                   feature_names="auto", isFromFile=False, model=None, cate_threshold=10, categorical_features='auto',
-                  eval_testx = None):
+                  eval_testx = None, trainx_weight = None, feval=None):
     if (model_type == 'lgb'):
         return lgb_train(trainx, trainy, testx, params, use_valid, valid_ratio, validx, validy,
                          num_boost_round, early_stopping_rounds, random_state, predict_prob,
                          feature_importances, group, model_save_file, feature_names, isFromFile,
-                        categorical_features=categorical_features,eval_testx=eval_testx)
+                        categorical_features=categorical_features,eval_testx=eval_testx, trainx_weight = trainx_weight, feval=feval)
     elif (model_type == 'xgb'):
         return xgb_train(trainx, trainy, testx, params, use_valid, valid_ratio, validx, validy,
                          num_boost_round, early_stopping_rounds, random_state, predict_prob,
-                         feature_importances, model_save_file, feature_names,eval_testx=eval_testx)
+                         feature_importances, model_save_file, feature_names,eval_testx=eval_testx,feval=feval)
     elif (model_type == 'catboost'):
-        return catboost_train(model, trainx, trainy, testx, cate_threshold, predict_prob,eval_testx=eval_testx)
+        return catboost_train(model, trainx, trainy, testx, cate_threshold,eval_testx=eval_testx,predict_proba=predict_prob,cates = categorical_features)
     else:  # sklearn
         return sklearn_train(model, trainx, trainy, testx, predict_prob,eval_testx=eval_testx)
 
