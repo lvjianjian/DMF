@@ -637,9 +637,8 @@ def mkpath(path):
 
 
 #并行 map更快
-def map_func(func, data):
-    agents = 8
-    chunksize = 16
+def map_func(func, data, n_thread = 8, chunksize=32):
+    agents = n_thread
     with contextlib.closing(Pool(processes=agents)) as pool:
         res = pool.map(func, data, chunksize)
     return res
