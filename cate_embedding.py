@@ -16,7 +16,7 @@ import pandas as pd
 from sklearn.preprocessing import LabelEncoder,MinMaxScaler
 import gc
 import numpy as np
-from sklearn.decomposition import IncrementalPCA, TruncatedSVD, LatentDirichletAllocation, NMF
+from sklearn.decomposition import IncrementalPCA, TruncatedSVD, LatentDirichletAllocation, NMF, FastICA, FactorAnalysis
 import scipy
 from sklearn.feature_extraction.text import CountVectorizer,TfidfTransformer
 # from DMF.data import *
@@ -407,6 +407,9 @@ class CateEmbedding(object):
 
             cate1s, cate2_as_matrix = simple_countVectorizer(df, dataPath, cate1, cate2, min_df=min_df, to_tfidf=to_tfidf,
                                                              ngram_range=ngram_range)
+            if(method_name in ['fa', 'fica']):
+                if(type(cate2_as_matrix) == scipy.sparse.csr.csr_matrix):
+                    cate2_as_matrix = cate2_as_matrix.toarray()
             topics_of_cate1 = method.fit_transform(cate2_as_matrix)
             del cate2_as_matrix;
             gc.collect()
@@ -427,12 +430,12 @@ class CateEmbedding(object):
             topics_of_cate1 = pd.read_feather(embedding_query_file)
             return topics_of_cate1
 
-    def lda_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, batch_size=520, n_jobs=20, to_tfidf=False, ngram_range = (1,1)):
+    def lda_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, batch_size=520, n_jobs=20, to_tfidf=False, ngram_range = (1,1), learning_method='online'):
         '''
         此部分是做cate1 cate2的相关embedding,这里只要共同show过的都算相关
         '''
         lda = LatentDirichletAllocation(n_components=n_components,
-                                        learning_method='online',
+                                        learning_method=learning_method,
                                         batch_size=batch_size,
                                         random_state=2018,
                                         n_jobs=n_jobs
@@ -456,6 +459,13 @@ class CateEmbedding(object):
         svd = TruncatedSVD(n_components, random_state=2018, tol=tol, n_iter=n_iter)
         return self._embedding(dataPath, df, cate1, cate2, svd, "svd", n_components=n_components, min_df=min_df, to_tfidf=to_tfidf, ngram_range=ngram_range)
 
+    def fica_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, tol=1e-4, n_iter=200, to_tfidf=False, ngram_range = (1,1)):
+        fica = FastICA(n_components, random_state=2018,tol=tol,max_iter=n_iter)
+        return self._embedding(dataPath, df, cate1, cate2, fica, "fica", n_components=n_components, min_df=min_df, to_tfidf=to_tfidf, ngram_range=ngram_range)
+
+    def fa_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, tol=1e-2, n_iter=1000, to_tfidf=False, ngram_range = (1,1)):
+        fa = FactorAnalysis(n_components, random_state=2018,tol=tol, max_iter=n_iter)
+        return self._embedding(dataPath, df, cate1, cate2, fa, "fa", n_components=n_components, min_df=min_df, to_tfidf=to_tfidf, ngram_range=ngram_range)
 
         # nn自编码输出编码层
     def _autoEncoder(self, data, output_dim=15, random_state=2018):
