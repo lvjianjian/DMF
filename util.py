@@ -86,7 +86,6 @@ def dump_feature(f):  # 定义装饰器函数，功能是传进来的函数进�
         t_end = time.time()
         print('call %s() in %fs' % (f.__name__, (t_end - t_start)))
         return r
-
     return fn
 
 
