@@ -29,7 +29,7 @@ from DMF.smooth import HyperParam
 import jieba
 from multiprocessing import Pool
 from functools import partial
-
+import feather
 
 MAX_DIS_FUNCTION = []
 
@@ -112,6 +112,47 @@ def dump_feature_remove_main_id(f):  # 定义装饰器函数，功能是传进�
             dump_path = os.path.join(path, f.__name__ + '.feather')
         if os.path.exists(dump_path):
             r = pd.read_feather(dump_path, nthreads=4)
+        else:
+            r = f(*args, **kw)
+            r.sort_values(by=SORT_ID, inplace=True)
+            # remove main id
+            if (not f.__name__.startswith('click_label')):
+                for _c in MAIN_ID:
+                    if (_c in r.columns):
+                        del r[_c]
+                for _c in SORT_ID:
+                    if (_c in r.columns):
+                        del r[_c]
+            # down bit
+            for c in r.columns:
+                if r[c].dtype == 'float64':
+                    r[c] = r[c].astype('float32')
+            r.reset_index(drop=True, inplace=True)
+            downcast(r)
+            r.to_feather(dump_path)
+        gc.collect()
+        t_end = time.time()
+        print('call %s() in %fs' % (f.__name__, (t_end - t_start)))
+        return r
+    return fn
+
+def dump_feature_remove_main_id2(f):  # 定义装饰器函数，功能是传进来的函数进行包装并返回包装后的函数
+    @functools.wraps(f)
+    def fn(*args, **kw):  # 对传进来的函数进行包装的函数
+        path = os.path.join(args[-1], "features_remove_main_id")
+        if (not os.path.exists(path)):
+            os.mkdir(path)
+        t_start = time.time()
+        if (len(args) > 1):
+            fname = f.__name__
+            for _n in args[:-1]:
+                fname += "_{}".format(_n)
+            fname += ".feather"
+            dump_path = os.path.join(path, fname)
+        else:
+            dump_path = os.path.join(path, f.__name__ + '.feather')
+        if os.path.exists(dump_path):
+            r = feather.read_dataframe(dump_path)
         else:
             r = f(*args, **kw)
             r.sort_values(by=SORT_ID, inplace=True)
