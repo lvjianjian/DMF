@@ -76,7 +76,7 @@ def lgb_train(trainx, trainy, testx, params, use_valid=True, valid_ratio=0.2, va
     if (model_save_file is not None):
         gbm.save_model(model_save_file, num_iteration=gbm.best_iteration)
     if (type(feature_importances) == list):
-        names, importances = zip(*(sorted(zip(gbm.feature_name(), gbm.feature_importance()), key=lambda x: -x[1])))
+        names, importances = zip(*(sorted(zip(gbm.feature_name(), gbm.feature_importance(importance_type='gain')), key=lambda x: -x[1])))
         feature_importances += list((zip(names, importances)))
         feature_importances.append(('best_score',gbm.best_score))
     if(eval_testx is None):

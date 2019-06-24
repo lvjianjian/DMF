@@ -88,7 +88,6 @@ def dump_feature(f):  # 定义装饰器函数，功能是传进来的函数进�
         t_end = time.time()
         print('call %s() in %fs' % (f.__name__, (t_end - t_start)))
         return r
-
     return fn
 
 
@@ -639,9 +638,15 @@ def mkpath(path):
 
 
 #并行 map更快
-def map_func(func, data, n_jobs):
+def map_func2(func, data, n_jobs):
     agents = n_jobs
     chunksize = len(data) // n_jobs + 1
+    with contextlib.closing(Pool(processes=agents)) as pool:
+        res = pool.map(func, data, chunksize)
+    return res
+    
+def map_func(func, data, n_thread = 8, chunksize=32):
+    agents = n_thread
     with contextlib.closing(Pool(processes=agents)) as pool:
         res = pool.map(func, data, chunksize)
     return res
