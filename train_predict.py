@@ -124,10 +124,10 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
             deltrainx = True
 
     if use_valid:
-        if(trainx_weight is not None):
-            print('trainx_weight is not None and use valid, exit')
-            exit(1)
         if (validx is None):
+            if(trainx_weight is not None):
+                print('trainx_weight is not None and use valid, exit')
+                exit(1)
             trainx, validx, trainy, validy = train_test_split(trainx,
                                                               trainy,
                                                               test_size=valid_ratio,
@@ -140,12 +140,14 @@ def lgb_train_model(trainx, trainy, params, use_valid=True, valid_ratio=0.2, val
                                      shape=(num_sample, num_feature),
                                     categorical_feature=categorical_features)
         else:
-            lgb_train_ = lgb.Dataset(trainx, trainy, feature_name=feature_names,categorical_feature=categorical_features)
+            lgb_train_ = lgb.Dataset(trainx, trainy, feature_name=feature_names,
+                                     categorical_feature=categorical_features,weight=trainx_weight)
         if(not deltrainx):
             del trainx
         del trainy
         gc.collect()
-        lgb_eval = lgb.Dataset(validx, validy, reference=lgb_train_,categorical_feature=categorical_features)
+        lgb_eval = lgb.Dataset(validx, validy, reference=lgb_train_,
+                               categorical_feature=categorical_features)
         del validx
         del validy
         gc.collect()
