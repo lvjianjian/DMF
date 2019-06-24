@@ -28,6 +28,8 @@ from itertools import product
 from DMF.smooth import HyperParam
 import jieba
 from multiprocessing import Pool
+from functools import partial
+
 
 MAX_DIS_FUNCTION = []
 
@@ -637,9 +639,9 @@ def mkpath(path):
 
 
 #并行 map更快
-def map_func(func, data):
-    agents = 8
-    chunksize = 16
+def map_func(func, data, n_jobs):
+    agents = n_jobs
+    chunksize = len(data) // n_jobs + 1
     with contextlib.closing(Pool(processes=agents)) as pool:
         res = pool.map(func, data, chunksize)
     return res
