@@ -24,7 +24,7 @@ import jieba
 from keras import Model,Sequential,Input
 from keras.layers import Dense
 from DMF.util import mkpath
-
+import feather
 
 def split_word_list(word_list, split_mode=False):
     seg_list = []
