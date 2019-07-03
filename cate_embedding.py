@@ -427,7 +427,7 @@ class CateEmbedding(object):
             topics_of_cate1.to_feather(embedding_query_file)
             return topics_of_cate1
         else:
-            topics_of_cate1 = pd.read_feather(embedding_query_file)
+            topics_of_cate1 = feather.read_dataframe(embedding_query_file)
             return topics_of_cate1
 
     def lda_embedding(self, dataPath, df, cate1, cate2, n_components=16, min_df=2, batch_size=520, n_jobs=20, to_tfidf=False, ngram_range = (1,1), learning_method='online'):
