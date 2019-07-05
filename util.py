@@ -812,6 +812,59 @@ def set_newid(alldata, cate_ids):
         alldata[_c + '_newid'] = alldata[_c + '_newid'].astype(int)
     return alldata
 
+def make_bin(make_bin_df, col, min_sample_in_bin):
+    temp = make_bin_df.groupby(col,as_index=False)[col].agg({'c':'count'})
+    _dict = {}
+    _prec = 0
+    _newid = 0
+    for _k,_v in temp[[col,'c']].values:
+        _prec += _v
+        if(_prec >= min_sample_in_bin):
+            _newid += 1
+            _prec = 0
+        _dict[_k] = _newid    
+    return make_bin_df[col].map(_dict).fillna(0).astype(int).values
+
+@performance
+def make_bins(f, cols, min_sample_in_bin):
+    global make_bin_df
+    make_bin_df = f
+    fs = []
+    for col in cols:
+        print(col, 'to bin')
+        f[col + '_bin'] = make_bin(f[[col]],col,min_sample_in_bin)
+        fs.append(col + '_bin')
+    return f[fs]
+
+make_bin_df = None
+
+def make_bin_parallel(col, min_sample_in_bin):
+    temp = make_bin_df.groupby(col,as_index=False)[col].agg({'c':'count'})
+    _dict = {}
+    _prec = 0
+    _newid = 0
+    for _k,_v in temp[[col,'c']].values:
+        _prec += _v
+        if(_prec >= min_sample_in_bin):
+            _newid += 1
+            _prec = 0
+        _dict[_k] = _newid    
+    return make_bin_df[col].map(_dict).fillna(0).astype(int).values
+
+@performance
+def make_bins_parallel(f, cols, min_sample_in_bin,n_thread = 8):
+    global make_bin_df
+    make_bin_df = f
+    fs = []
+    for col in cols:
+        print(col, 'to bin')
+        fs.append(col + '_bin')
+    ress = map_func(partial(make_bin_parallel,min_sample_in_bin = min_sample_in_bin),cols,n_thread)  
+    res = pd.DataFrame()
+    for _f,_r in zip(fs,ress):
+        res[_f] = _r
+    return res
+
 
 if __name__ == '__main__':
 
