@@ -814,6 +814,7 @@ def set_newid(alldata, cate_ids):
 
 def make_bin(make_bin_df, col, min_sample_in_bin):
     temp = make_bin_df.groupby(col,as_index=False)[col].agg({'c':'count'})
+    temp = temp.sort_values(by=col)
     _dict = {}
     _prec = 0
     _newid = 0
@@ -840,6 +841,7 @@ make_bin_df = None
 
 def make_bin_parallel(col, min_sample_in_bin):
     temp = make_bin_df.groupby(col,as_index=False)[col].agg({'c':'count'})
+    temp = temp.sort_values(by=col)
     _dict = {}
     _prec = 0
     _newid = 0
