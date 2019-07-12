@@ -23,10 +23,12 @@ from sklearn.feature_extraction.text import CountVectorizer,TfidfTransformer
 import jieba
 from keras import Model,Sequential,Input
 from keras.layers import Dense
-from DMF.util import mkpath
+from DMF.util import mkpath,map_func
 import feather
 from gensim.models import Word2Vec
 from gensim.models.doc2vec import Doc2Vec, TaggedDocument
+
+
 
 def split_word_list(word_list, split_mode=False):
     seg_list = []
@@ -155,6 +157,14 @@ def simple_splitword_countVectorizer(df, dataPath, cate1, cate2, min_df=2, split
     if(to_tfidf):
         cate2_as_matrix = TfidfTransformer().fit_transform(cate2_as_matrix)
     return cate1s, cate2_as_matrix
+
+
+VEC_MODEL = None
+def get_from_model(x):
+    if(x in VEC_MODEL):
+        return VEC_MODEL[x]
+    else:
+        return [np.nan] * VEC_MODEL.vector_size
 
 class CateEmbedding(object):
     def __init__(self, main_id=None):
@@ -601,14 +611,15 @@ class CateEmbedding(object):
                 return topics_of_cate1
 
              
-    def word2vec_embedding(self, dataPath, df, cate1, cate2, model_name, n_components=30, n_jobs=20, 
+    def word2vec(self, dataPath, df, cate1, cate2, model_name, n_components=30, n_jobs=20, 
                           min_count = 1, sg=0, hs=0):
         df[cate1] = df[cate1].astype(str)
         df[cate2] = df[cate2].astype(str)
         model_path = os.path.join(dataPath,'cache')
         if(not os.path.exists(model_path)):
             os.mkdir(model_path)
-        model_path = os.path.join(model_path, 'w2v_{}_{}_{}_sg{}_hs{}'.format(cate1,cate2,model_name,sg,hs))
+        _n = 'w2v_{}_{}_{}_sg{}_hs{}'.format(cate1,cate2,model_name,sg,hs)
+        model_path = os.path.join(model_path, _n)
         if(os.path.exists(model_path))
             return Word2Vec.load(model_path)
         else:
@@ -617,15 +628,18 @@ class CateEmbedding(object):
             model = Word2Vec(sentence, size=n_components, window = 5, min_count = min_count, workers=n_jobs,
                             sg = sg, hs = hs)
             model.save(model_path)
-            return model
+            return model, _n
     
-    def doc2vec_embedding(self, dataPath, df, cate1, cate2, model_name, n_components=30, n_jobs=20, min_count=1):
+   
+    
+    def doc2vec(self, dataPath, df, cate1, cate2, model_name, n_components=30, n_jobs=20, min_count=1):
         df[cate1] = df[cate1].astype(str)
         df[cate2] = df[cate2].astype(str)
         model_path = os.path.join(dataPath,'cache')
         if(not os.path.exists(model_path)):
             os.mkdir(model_path)
-        model_path = os.path.join(model_path, 'doc2v_{}_{}_{}'.format(cate1,cate2,model_name))
+        _name = 'doc2v_{}_{}_{}'.format(cate1,cate2,model_name)
+        model_path = os.path.join(model_path, _name)
         if(os.path.exists(model_path))
             return Doc2Vec.load(model_path)
         else:
@@ -636,5 +650,19 @@ class CateEmbedding(object):
             model = Doc2Vec(docs, vector_size=n_components, window=5, min_count=min_count, workers=n_jobs)
             model.save(model_path)
             return model
-        
+    
+    def get_vec_embedding(self, model, name, df, cate, n_jobs=20):
+        df[cate] = df[cate].astype(str)
+        uniques = df[[cate]].drop_duplicates()
+        ids = list(uniques[cate].values)
+        global VEC_MODEL
+        if('doc2v' in name):
+            VEC_MODEL = model.docvecs
+        else:
+            VEC_MODEL = model.wv
+        values = map_func(get_from_model, ids, n_jobs, len(ids) // n_jobs + 1)
+        res = pd.DataFrame(values)
+        res.columns = [name + '_{}'.format(_i) for _i in range(model.vector_size)]
+        res[cate] = ids
+        return df[[cate]].merge(res, on=cate, how='left')
         
