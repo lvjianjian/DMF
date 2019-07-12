@@ -25,6 +25,8 @@ from keras import Model,Sequential,Input
 from keras.layers import Dense
 from DMF.util import mkpath
 import feather
+from gensim.models import Word2Vec
+from gensim.models.doc2vec import Doc2Vec, TaggedDocument
 
 def split_word_list(word_list, split_mode=False):
     seg_list = []
@@ -189,7 +191,7 @@ class CateEmbedding(object):
             emb_dict[id] = weights
         return emb_dict
 
-    def cate_embeding_by_all_deep_walk(self, dataPath, df, cate1, cate2, n_component):
+    def cate_embeding_by_all_deep_walk(self, dataPath, df, cate1, cate2, n_component, number_walks = 30):
         """
 
         :param dataPath:
@@ -228,8 +230,8 @@ class CateEmbedding(object):
             res2 = res2.iloc[:, 0] + " " + res2.iloc[:, 1]
             adj = pd.concat([res1, res2])
             adj.to_csv(adj_path, index=None)
-            cm = "deepwalk --input {}  --output {} --representation-size {} --workers 16 --number-walks 30".format(
-                    adj_path, emb_path, n_component)
+            cm = "deepwalk --input {}  --output {} --representation-size {} --workers 16 --number-walks {}".format(
+                    adj_path, emb_path, n_component, number_walks)
             os.system(cm)
             emb = self._read_emb(emb_path)
             del res1, res2, adj
@@ -253,7 +255,6 @@ class CateEmbedding(object):
     def cate_embedding_by_all_deepwalk_cate1_2(self, dataPath, df, cate1, cate2, n_components, decomposition_to1=-1,
                                                decomposition_to2=-1):
         """
-
         :param dataPath:
         :param df:
         :param cate1:
@@ -316,7 +317,6 @@ class CateEmbedding(object):
     def cate_embedding_by_all_deepwalk_cate1(self, dataPath, df, cate1, cate2, n_components,
                                              decomposition_to=-1):  # just use cate1 embedding
         """
-
         :param df:
         :param dataPath:
         :param cate1:
@@ -600,3 +600,41 @@ class CateEmbedding(object):
                 topics_of_cate1 = pd.read_feather(embedding_query_file)
                 return topics_of_cate1
 
+             
+    def word2vec_embedding(self, dataPath, df, cate1, cate2, model_name, n_components=30, n_jobs=20, 
+                          min_count = 1, sg=0, hs=0):
+        df[cate1] = df[cate1].astype(str)
+        df[cate2] = df[cate2].astype(str)
+        model_path = os.path.join(dataPath,'cache')
+        if(not os.path.exists(model_path)):
+            os.mkdir(model_path)
+        model_path = os.path.join(model_path, 'w2v_{}_{}_{}_sg{}_hs{}'.format(cate1,cate2,model_name,sg,hs))
+        if(os.path.exists(model_path))
+            return Word2Vec.load(model_path)
+        else:
+            temp = df.groupby(cate1)[cate2].agg(lambda x:list(x))
+            sentence = list(temp.values)
+            model = Word2Vec(sentence, size=n_components, window = 5, min_count = min_count, workers=n_jobs,
+                            sg = sg, hs = hs)
+            model.save(model_path)
+            return model
+    
+    def doc2vec_embedding(self, dataPath, df, cate1, cate2, model_name, n_components=30, n_jobs=20, min_count=1):
+        df[cate1] = df[cate1].astype(str)
+        df[cate2] = df[cate2].astype(str)
+        model_path = os.path.join(dataPath,'cache')
+        if(not os.path.exists(model_path)):
+            os.mkdir(model_path)
+        model_path = os.path.join(model_path, 'doc2v_{}_{}_{}'.format(cate1,cate2,model_name))
+        if(os.path.exists(model_path))
+            return Doc2Vec.load(model_path)
+        else:
+            temp = df.groupby(cate1)[cate2].agg(lambda x:list(x))
+            docs = []
+            for _s,_t in zip(list(temp.values),list(temp.index)):
+                docs.append(TaggedDocument(_s,[_t]))
+            model = Doc2Vec(docs, vector_size=n_components, window=5, min_count=min_count, workers=n_jobs)
+            model.save(model_path)
+            return model
+        
+        
