@@ -875,6 +875,7 @@ def statistic_for_feats(feats_df):
                         '{}_mean'.format(name): np.mean(r, axis=1),
                         '{}_median'.format(name): np.median(r, axis=1),
                         '{}_std'.format(name): np.std(r, axis=1)})
+    res['_index'] = res.index
     return res
 
 
