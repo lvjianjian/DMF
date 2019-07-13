@@ -620,7 +620,7 @@ class CateEmbedding(object):
             os.mkdir(model_path)
         _n = 'w2v_{}_{}_{}_sg{}_hs{}'.format(cate1,cate2,model_name,sg,hs)
         model_path = os.path.join(model_path, _n)
-        if(os.path.exists(model_path))
+        if(os.path.exists(model_path)):
             return Word2Vec.load(model_path)
         else:
             temp = df.groupby(cate1)[cate2].agg(lambda x:list(x))
@@ -640,7 +640,7 @@ class CateEmbedding(object):
             os.mkdir(model_path)
         _name = 'doc2v_{}_{}_{}'.format(cate1,cate2,model_name)
         model_path = os.path.join(model_path, _name)
-        if(os.path.exists(model_path))
+        if(os.path.exists(model_path)):
             return Doc2Vec.load(model_path)
         else:
             temp = df.groupby(cate1)[cate2].agg(lambda x:list(x))

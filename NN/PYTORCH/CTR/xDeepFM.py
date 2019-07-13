@@ -73,7 +73,6 @@ class xDeepCNN(nn.Module):
         for _i in range(0, self.cnn_n):
             self.cnns.append(nn.Conv2d(self.f,self.cnn_hidden,(1,1)))
 
-
     def _cross_cnn(self, x):  # (b, f, k)
         return cross_cnn(x, self.cnns, 'identity')
 
