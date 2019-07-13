@@ -613,16 +613,16 @@ class CateEmbedding(object):
              
     def word2vec(self, dataPath, df, cate1, cate2, model_name, n_components=30, n_jobs=20, 
                           min_count = 1, sg=0, hs=0):
-        df[cate1] = df[cate1].astype(str)
-        df[cate2] = df[cate2].astype(str)
         model_path = os.path.join(dataPath,'cache')
         if(not os.path.exists(model_path)):
             os.mkdir(model_path)
         _n = 'w2v_{}_{}_{}_sg{}_hs{}'.format(cate1,cate2,model_name,sg,hs)
         model_path = os.path.join(model_path, _n)
         if(os.path.exists(model_path)):
-            return Word2Vec.load(model_path)
+            return Word2Vec.load(model_path), _n
         else:
+            df[cate1] = df[cate1].astype(str)
+            df[cate2] = df[cate2].astype(str)
             temp = df.groupby(cate1)[cate2].agg(lambda x:list(x))
             sentence = list(temp.values)
             model = Word2Vec(sentence, size=n_components, window = 5, min_count = min_count, workers=n_jobs,
@@ -630,26 +630,24 @@ class CateEmbedding(object):
             model.save(model_path)
             return model, _n
     
-   
-    
     def doc2vec(self, dataPath, df, cate1, cate2, model_name, n_components=30, n_jobs=20, min_count=1):
-        df[cate1] = df[cate1].astype(str)
-        df[cate2] = df[cate2].astype(str)
         model_path = os.path.join(dataPath,'cache')
         if(not os.path.exists(model_path)):
             os.mkdir(model_path)
         _name = 'doc2v_{}_{}_{}'.format(cate1,cate2,model_name)
         model_path = os.path.join(model_path, _name)
         if(os.path.exists(model_path)):
-            return Doc2Vec.load(model_path)
+            return Doc2Vec.load(model_path), _name
         else:
+            df[cate1] = df[cate1].astype(str)
+            df[cate2] = df[cate2].astype(str)
             temp = df.groupby(cate1)[cate2].agg(lambda x:list(x))
             docs = []
             for _s,_t in zip(list(temp.values),list(temp.index)):
                 docs.append(TaggedDocument(_s,[_t]))
             model = Doc2Vec(docs, vector_size=n_components, window=5, min_count=min_count, workers=n_jobs)
             model.save(model_path)
-            return model
+            return model, _name
     
     def get_vec_embedding(self, model, name, df, cate, n_jobs=20):
         df[cate] = df[cate].astype(str)
@@ -664,5 +662,5 @@ class CateEmbedding(object):
         res = pd.DataFrame(values)
         res.columns = [name + '_{}'.format(_i) for _i in range(model.vector_size)]
         res[cate] = ids
-        return df[[cate]].merge(res, on=cate, how='left')
+        return res
         
