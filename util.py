@@ -867,6 +867,16 @@ def make_bins_parallel(f, cols, min_sample_in_bin,n_thread = 8):
         res[_f] = _r
     return res
 
+def statistic_for_feats(feats_df):
+    name = feats_df.columns[0][:-2]
+    r = np.vstack(feats_df.values).astype(float)
+    res = pd.DataFrame({'{}_min'.format(name): np.min(r, axis=1),
+                        '{}_max'.format(name): np.max(r, axis=1),
+                        '{}_mean'.format(name): np.mean(r, axis=1),
+                        '{}_median'.format(name): np.median(r, axis=1),
+                        '{}_std'.format(name): np.std(r, axis=1)})
+    return res
+
 
 if __name__ == '__main__':
 
