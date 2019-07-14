@@ -261,7 +261,19 @@ class CateEmbedding(object):
             cate1_df.to_pickle(cate1_path)
             cate2_df.to_pickle(cate2_path)
         return cate1_df, cate2_df
-
+    
+    def unstack_features(self, df, cate):
+        cols = df.columns.tolist()
+        cols.remove(cate)
+        assert(len(cols) == 1)
+        feat_name = cols[0]
+        res = np.vstack(df[feat_name].values)
+        ids = df[cate]
+        res = pd.DataFrame(res)
+        res.columns = ['{}_{}'.format(feat_name, _i) for _i in range(res.shape[1])]
+        res[cate] = ids
+        return res
+    
     def cate_embedding_by_all_deepwalk_cate1_2(self, dataPath, df, cate1, cate2, n_components, decomposition_to1=-1,
                                                decomposition_to2=-1):
         """
